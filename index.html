@@ -1,362 +1,286 @@
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Cut - VR寻球</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
-    canvas { display: block; }
-
-    /* UI 叠加层 */
-    #ui {
-      position: fixed;
-      bottom: 40px;
-      left: 0; right: 0;
-      text-align: center;
-      z-index: 10;
-      pointer-events: none;
-    }
-    #ui span {
-      display: inline-block;
-      padding: 12px 20px;
-      background: rgba(0,0,0,0.5);
-      color: #fff;
-      font-size: 16px;
-      font-family: -apple-system, "Helvetica Neue", sans-serif;
-      border-radius: 12px;
-      font-weight: 600;
-    }
-
-    /* 加载层 */
-    #loading {
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: #0a0a1e;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      z-index: 100;
-      transition: opacity 0.5s;
-    }
-    #loading.hidden { opacity: 0; pointer-events: none; }
-    #loading span {
-      color: #fff;
-      font-size: 24px;
-      font-family: -apple-system, sans-serif;
-    }
-    #loading .dot {
-      display: inline-block;
-      width: 12px; height: 12px;
-      background: #6666ff;
-      border-radius: 50%;
-      margin: 20px;
-      animation: pulse 1s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.3); opacity: 0.5; }
-    }
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<title>Cut</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:-apple-system,sans-serif}
+#mask{position:fixed;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;z-index:10;background:#000}
+#cvbox{overflow:hidden;border-radius:32px;background:#000;box-shadow:0 0 60px rgba(60,50,120,.15)}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#score{position:fixed;top:24px;right:18px;z-index:100;display:flex;align-items:center;gap:6px;font-size:26px;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.7)}
+#score .n{display:inline-block;min-width:24px;text-align:center}
+#score .n.pop{animation:p .3s}
+@keyframes p{0%{transform:scale(1)}50%{transform:scale(1.5)}100%{transform:scale(1)}}
+#splash{position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(180deg,#1a1a2e,#16213e);transition:opacity .6s}
+#splash.h{opacity:0;pointer-events:none}
+#splash h1{font-size:46px}
+#splash p{color:rgba(255,255,255,.55);font-size:14px;text-align:center;padding:0 30px;line-height:1.7;margin:8px 0 32px}
+#splash button{padding:16px 46px;font-size:18px;border:none;border-radius:14px;background:#5555dd;color:#fff;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(85,85,221,.35)}
+#hint{position:fixed;bottom:14px;left:0;right:0;text-align:center;z-index:100;color:rgba(255,255,255,.55);font-size:12px}
+#flash{position:fixed;top:0;left:0;right:0;bottom:0;z-index:150;pointer-events:none;background:radial-gradient(circle,rgba(255,255,255,.22),transparent 70%);opacity:0;transition:opacity .15s}
+</style>
 </head>
 <body>
+<div id="splash"><h1>🐾 Cut</h1><p>转动手机寻找藏在房间里的小毛球<br>找到后点击它来捕捉！</p><button id="go">开始探索</button></div>
+<div id="score"><span>🐾</span><span class="n" id="sn">0</span></div>
+<div id="hint">🔍 转动手机 · 点击小球捕捉</div>
+<div id="flash"></div>
+<div id="mask"><div id="cvbox"></div></div>
 
-<div id="loading">
-  <span>🔍 正在初始化 VR 空间</span>
-  <div class="dot"></div>
-</div>
-
-<div id="ui">
-  <span>🔍 转动手机寻找白色小毛球</span>
-</div>
-
-<!-- Three.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
 <script>
-// ============================================================
-// Cut - VR 360° 全景寻球
-// 纯 Three.js + DeviceOrientation API
-// ============================================================
+(function(){
+'use strict';
 
-(function() {
-  'use strict';
+/* ── 常量 ── */
+const RS = 8, RH = 4, BR = 0.18;
 
-  // ─── 场景初始化 ───
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0a0a1e);
+/* ── 场景/相机/渲染 ── */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xfff8f0);
+scene.fog = new THREE.FogExp2(0xfff8f0, 0.035);
 
-  // 相机：FOV 60，营造"潜望镜"感
-  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.05, 100);
-  camera.position.set(0, 0, 0);
+const cam = new THREE.PerspectiveCamera(55, 1, 0.05, 50);
+const pivot = new THREE.Object3D();
+scene.add(pivot);
+pivot.add(cam);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  document.body.appendChild(renderer.domElement);
+const box = document.getElementById('cvbox');
+const R = new THREE.WebGLRenderer({ antialias: true });
+R.shadowMap.enabled = true;
+R.shadowMap.type = THREE.PCFSoftShadowMap;
+R.outputEncoding = THREE.sRGBEncoding;
+R.toneMapping = THREE.ACESFilmicToneMapping;
+R.toneMappingExposure = 1.1;
+box.appendChild(R.domElement);
 
-  // ─── 灯光 ───
-  const ambient = new THREE.AmbientLight(0xffffff, 0.5);
-  scene.add(ambient);
+function rsz() {
+  const w = Math.min(innerWidth * 0.92, 380), h = Math.min(innerHeight * 0.88, 700);
+  box.style.width = w+'px'; box.style.height = h+'px';
+  cam.aspect = w/h; cam.updateProjectionMatrix(); R.setSize(w, h);
+}
+rsz(); addEventListener('resize', rsz);
 
-  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-  dirLight.position.set(0, -5, -2);
-  scene.add(dirLight);
+/* ── 灯光 ── */
+scene.add(new THREE.HemisphereLight(0xfff5e6, 0xd4e6ff, 0.5));
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+const sun = new THREE.DirectionalLight(0xfff5e0, 0.9);
+sun.position.set(3,4,-2); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);
+sun.shadow.camera.near=0.5; sun.shadow.camera.far=20;
+sun.shadow.camera.left=-6; sun.shadow.camera.right=6;
+sun.shadow.camera.top=6; sun.shadow.camera.bottom=-6;
+scene.add(sun);
+const p1=new THREE.PointLight(0xffeedd,.5,10); p1.position.set(-2,3,-2); scene.add(p1);
+const p2=new THREE.PointLight(0xddeeff,.3,8); p2.position.set(2,3,2); scene.add(p2);
 
-  // ─── 相机枢轴（陀螺仪驱动） ───
-  const pivot = new THREE.Object3D();
-  scene.add(pivot);
-  pivot.add(camera);
+/* ── 工具 ── */
+function sm(c){return new THREE.MeshStandardMaterial({color:c,roughness:.75,metalness:0})}
 
-  // ─── 房间网格 ───
-  const ROOM_HALF = 10;
-  const STEP = 2;
-  const N = 10;
-  const floorMat = new THREE.LineBasicMaterial({ color: 0x4040aa, transparent: true, opacity: 0.8 });
-  const wallMat = new THREE.LineBasicMaterial({ color: 0x282868, transparent: true, opacity: 0.5 });
-  const ceilMat = new THREE.LineBasicMaterial({ color: 0x1a1a40, transparent: true, opacity: 0.35 });
+/* ── 房间 ── */
+const fl=new THREE.Mesh(new THREE.PlaneGeometry(RS,RS),sm(0xe8d5b7));
+fl.material.roughness=.85; fl.rotation.x=-Math.PI/2; fl.position.y=-RH; fl.receiveShadow=true; scene.add(fl);
+const ce=new THREE.Mesh(new THREE.PlaneGeometry(RS,RS),sm(0xfff9f0));
+ce.rotation.x=Math.PI/2; ce.position.y=RH; scene.add(ce);
+function aw(p,r,c){const m=new THREE.Mesh(new THREE.PlaneGeometry(RS,RS),sm(c));m.position.copy(p);m.rotation.y=r;m.receiveShadow=true;scene.add(m)}
+aw(new THREE.Vector3(0,0,-RH),0,0xf5efe6);
+aw(new THREE.Vector3(0,0,RH),Math.PI,0xf0e8da);
+aw(new THREE.Vector3(-RH,0,0),Math.PI/2,0xf8f0e4);
+aw(new THREE.Vector3(RH,0,0),-Math.PI/2,0xf2ebe0);
+// 踢脚线
+[[0,-RH+.075,-RH+.02],[0,-RH+.075,RH-.02],[-RH+.02,-RH+.075,0],[RH-.02,-RH+.075,0]].forEach((p,i)=>{
+  const s=i<2?[RS,.15,.04]:[.04,.15,RS];
+  const m=new THREE.Mesh(new THREE.BoxGeometry(s[0],s[1],s[2]),sm(0xd4c4a8));
+  m.position.set(p[0],p[1],p[2]);scene.add(m);
+});
 
-  function makeLine(x1,y1,z1, x2,y2,z2, mat) {
-    const geo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(x1,y1,z1),
-      new THREE.Vector3(x2,y2,z2)
-    ]);
-    scene.add(new THREE.Line(geo, mat));
-  }
+/* ── 家具 ── */
+function tbl(x,z){
+  const g=new THREE.Group(),t=sm(0xc8a87c);t.roughness=.6;
+  const tp=new THREE.Mesh(new THREE.BoxGeometry(1,.06,.7),t);tp.position.y=.55;tp.castShadow=true;tp.receiveShadow=true;g.add(tp);
+  const lg=new THREE.CylinderGeometry(.025,.025,.55,8),lm=sm(0xb8986c);
+  [[-0.4,-.25],[.4,-.25],[-.4,.25],[.4,.25]].forEach(([a,b])=>{const l=new THREE.Mesh(lg,lm);l.position.set(a,.275,b);l.castShadow=true;g.add(l)});
+  g.position.set(x,-RH+.001,z);scene.add(g);
+}
+tbl(2.5,-2);tbl(-2.2,1.8);
 
-  for (let i = 0; i <= N; i++) {
-    const p = -ROOM_HALF + i * STEP;
-    // 地板
-    makeLine(p, -ROOM_HALF, -ROOM_HALF, p, -ROOM_HALF, ROOM_HALF, floorMat);
-    makeLine(-ROOM_HALF, -ROOM_HALF, p, ROOM_HALF, -ROOM_HALF, p, floorMat);
-    // 天花板
-    makeLine(p, ROOM_HALF, -ROOM_HALF, p, ROOM_HALF, ROOM_HALF, ceilMat);
-    makeLine(-ROOM_HALF, ROOM_HALF, p, ROOM_HALF, ROOM_HALF, p, ceilMat);
-    // 前墙
-    makeLine(p, -ROOM_HALF, -ROOM_HALF, p, ROOM_HALF, -ROOM_HALF, wallMat);
-    makeLine(-ROOM_HALF, p, -ROOM_HALF, ROOM_HALF, p, -ROOM_HALF, wallMat);
-    // 后墙
-    makeLine(p, -ROOM_HALF, ROOM_HALF, p, ROOM_HALF, ROOM_HALF, wallMat);
-    makeLine(-ROOM_HALF, p, ROOM_HALF, ROOM_HALF, p, ROOM_HALF, wallMat);
-    // 左墙
-    makeLine(-ROOM_HALF, -ROOM_HALF, p, -ROOM_HALF, ROOM_HALF, p, wallMat);
-    makeLine(-ROOM_HALF, p, -ROOM_HALF, -ROOM_HALF, p, ROOM_HALF, wallMat);
-    // 右墙
-    makeLine(ROOM_HALF, -ROOM_HALF, p, ROOM_HALF, ROOM_HALF, p, wallMat);
-    makeLine(ROOM_HALF, p, -ROOM_HALF, ROOM_HALF, p, ROOM_HALF, wallMat);
-  }
+function shf(x,z,ry){
+  const g=new THREE.Group(),s=sm(0xbfa882);s.roughness=.7;
+  for(let i=0;i<4;i++){const b=new THREE.Mesh(new THREE.BoxGeometry(1.4,.04,.3),s);b.position.y=.4+i*.5;b.castShadow=true;b.receiveShadow=true;g.add(b)}
+  [-.7,.7].forEach(a=>{const s2=new THREE.Mesh(new THREE.BoxGeometry(.04,2,.3),sm(0xa89070));s2.position.set(a,1,0);s2.castShadow=true;g.add(s2)});
+  const bc=[0xcc6666,0x6688aa,0x88aa66,0xddaa66,0xaa66aa,0x66aacc];
+  for(let sh=0;sh<3;sh++){let bx=-.5;for(let i=0;i<4+Math.floor(Math.random()*3)&&bx<.5;i++){
+    const bw=.04+Math.random()*.06,bh=.25+Math.random()*.15;
+    const bk=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,.22),sm(bc[Math.floor(Math.random()*bc.length)]));
+    bk.position.set(bx+bw/2,.4+sh*.5+bh/2+.02,0);bk.castShadow=true;g.add(bk);bx+=bw+.01;}}
+  g.position.set(x,-RH+.001,z);g.rotation.y=ry;scene.add(g);
+}
+shf(-2.8,-2.5,.3);shf(2.5,2.8,-.2);
 
-  // 中心圆环（地板标记）
-  const ringGeo = new THREE.TorusGeometry(0.4, 0.025, 8, 32);
-  const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  const ring = new THREE.Mesh(ringGeo, ringMat);
-  ring.position.set(0, -ROOM_HALF + 0.02, 0);
-  ring.rotation.x = Math.PI / 2;
-  scene.add(ring);
+// 地毯
+const rg=new THREE.Mesh(new THREE.CircleGeometry(1.2,32),sm(0xd4a0a0));
+rg.material.roughness=.95;rg.rotation.x=-Math.PI/2;rg.position.set(0,-RH+.005,.5);rg.receiveShadow=true;scene.add(rg);
 
-  // ─── 白色小毛球 ───
-  const FUR_RADIUS = 0.15;
-  const ballGroup = new THREE.Group();
+// 靠垫
+[[-1.5,2.5,.3,0xe8c0a0],[1.2,-2.5,-.2,0xc0d0e8]].forEach(function(a){
+  const c=new THREE.Mesh(new THREE.BoxGeometry(.5,.15,.5),sm(a[3]));
+  c.material.roughness=.9;c.position.set(a[0],-RH+.08,a[1]);c.rotation.y=a[2];c.castShadow=true;c.receiveShadow=true;scene.add(c);
+});
 
+// 窗户
+(function(){
+  const g=new THREE.Group(),f=sm(0xe8e0d4);
+  function bar(geo,pos){const m=new THREE.Mesh(geo,f);m.position.set(pos[0],pos[1],pos[2]);g.add(m)}
+  bar(new THREE.BoxGeometry(1.4,.08,.06),[0,.5,0]);
+  bar(new THREE.BoxGeometry(1.4,.08,.06),[0,-.5,0]);
+  bar(new THREE.BoxGeometry(.08,1,.06),[-.66,0,0]);
+  bar(new THREE.BoxGeometry(.08,1,.06),[.66,0,0]);
+  bar(new THREE.BoxGeometry(1.4,.08,.06),[0,0,0]);
+  bar(new THREE.BoxGeometry(.08,1,.06),[0,0,0]);
+  const gl=new THREE.Mesh(new THREE.PlaneGeometry(1.3,.9),new THREE.MeshStandardMaterial({color:0xcce0ff,roughness:.1,metalness:.1,transparent:true,opacity:.3}));
+  g.add(gl);g.position.set(1.5,.8,-RH+.01);scene.add(g);
+})();
+
+// 画框
+function painting(x,y,z,ry,c){
+  const g=new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(.7,.5,.04),sm(0x8B7355)));
+  const cv=new THREE.Mesh(new THREE.PlaneGeometry(.6,.4),sm(c));cv.position.z=.025;g.add(cv);
+  g.position.set(x,y,z);g.rotation.y=ry;scene.add(g);
+}
+painting(-1.5,1.2,-RH+.03,0,0xe8a0a0);
+painting(2.5,1,RH-.03,Math.PI,0xa0c8e8);
+
+/* ── 小球系统 ── */
+const balls=[];
+let score=0;
+const sn=document.getElementById('sn');
+
+function makeBall(){
+  const r=BR, g=new THREE.Group();
   // 主体
-  const bodyGeo = new THREE.SphereGeometry(FUR_RADIUS, 24, 24);
-  const bodyMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    roughness: 0.9,
-    metalness: 0.0
-  });
-  const body = new THREE.Mesh(bodyGeo, bodyMat);
-  ballGroup.add(body);
-
+  const body=new THREE.Mesh(new THREE.SphereGeometry(r,24,24),new THREE.MeshStandardMaterial({color:0xffffff,roughness:.9,metalness:0,transparent:true,opacity:1}));
+  body.castShadow=true;g.add(body);
   // 毛刺
-  for (let i = 0; i < 20; i++) {
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.random() * Math.PI;
-    const dist = FUR_RADIUS * (1.0 + Math.random() * 0.35);
-    const spikeGeo = new THREE.SphereGeometry(FUR_RADIUS * 0.12, 6, 6);
-    const spikeMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 0.95
-    });
-    const spike = new THREE.Mesh(spikeGeo, spikeMat);
-    spike.position.set(
-      dist * Math.sin(phi) * Math.cos(theta),
-      dist * Math.cos(phi),
-      dist * Math.sin(phi) * Math.sin(theta)
-    );
-    ballGroup.add(spike);
+  for(let i=0;i<18;i++){
+    const th=Math.random()*Math.PI*2,ph=Math.random()*Math.PI;
+    const d=r*(1+Math.random()*.4);
+    const sp=new THREE.Mesh(new THREE.SphereGeometry(r*.1,6,6),new THREE.MeshStandardMaterial({color:0xfffef5,roughness:.95,transparent:true,opacity:1}));
+    sp.position.set(d*Math.sin(ph)*Math.cos(th),d*Math.cos(ph),d*Math.sin(ph)*Math.sin(th));
+    sp.castShadow=true;g.add(sp);
   }
-
   // 眼睛
-  const eyeGeo = new THREE.SphereGeometry(0.018, 8, 8);
-  const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-  leftEye.position.set(-0.04, 0.03, -FUR_RADIUS * 0.88);
-  ballGroup.add(leftEye);
-
-  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-  rightEye.position.set(0.04, 0.03, -FUR_RADIUS * 0.88);
-  ballGroup.add(rightEye);
-
-  // 点光源
-  const pointLight = new THREE.PointLight(0xffffff, 1, 1.5);
-  ballGroup.add(pointLight);
-
+  const eg=new THREE.SphereGeometry(.022,8,8),em=new THREE.MeshBasicMaterial({color:0x222222});
+  const le=new THREE.Mesh(eg,em);le.position.set(-.045,.035,-r*.88);g.add(le);
+  const re=new THREE.Mesh(eg,em);re.position.set(.045,.035,-r*.88);g.add(re);
+  // 鼻子
+  const nose=new THREE.Mesh(new THREE.SphereGeometry(.012,8,8),new THREE.MeshBasicMaterial({color:0xff8888}));
+  nose.position.set(0,0,-r*.95);g.add(nose);
+  // 光
+  g.add(new THREE.PointLight(0xfff5ee,.4,2));
   // 随机位置
-  const bx = (Math.random() * 10 - 5);
-  const by = Math.random() * 7 - 3;
-  const bz = Math.random() * 6 - 5;
-  ballGroup.position.set(bx, by, bz);
-  ballGroup.rotation.y = Math.random() * Math.PI * 2;
-  scene.add(ballGroup);
+  const x=(Math.random()*2-1)*(RH-1.5);
+  const y=-RH+.5+Math.random()*(RH*2-2);
+  const z=(Math.random()*2-1)*(RH-1.5);
+  g.position.set(x,y,z);
+  scene.add(g);
+  return {mesh:g,baseY:y,x:x,z:z,phase:Math.random()*Math.PI*2,speed:1.5+Math.random(),rotS:.3+Math.random(),peek:0,peekDur:3+Math.random()*5};
+}
 
-  // ─── 陀螺仪控制 ───
-  let deviceOrientationAvailable = false;
-  let initOffset = new THREE.Quaternion();
-  let deviceQuat = new THREE.Quaternion();
-  let lastEuler = null;
+function respawn(ball){
+  const x=(Math.random()*2-1)*(RH-1.5);
+  const y=-RH+.5+Math.random()*(RH*2-2);
+  const z=(Math.random()*2-1)*(RH-1.5);
+  ball.mesh.position.set(x,y,z);
+  ball.x=x;ball.y=y;ball.z=z;ball.baseY=y;ball.peek=0;
+}
 
-  function onDeviceOrientation(event) {
-    const alpha = event.alpha || 0;   // Z 轴（0-360）
-    const beta = event.beta || 0;     // X 轴（前后 -180-180）
-    const gamma = event.gamma || 0;   // Y 轴（左右 -90-90）
+function catchBall(idx){
+  const b=balls[idx];
+  if(!b) return;
+  // 闪光
+  const fl=document.getElementById('flash');fl.style.opacity='1';setTimeout(function(){fl.style.opacity='0'},200);
+  // 分数
+  score++;sn.textContent=score;sn.classList.remove('pop');void sn.offsetWidth;sn.classList.add('pop');
+  // 重新生成
+  respawn(b);
+}
 
-    // 转换为弧度
-    const gammaRad = THREE.MathUtils.degToRad(gamma);
-    const betaRad = THREE.MathUtils.degToRad(beta);
-    const alphaRad = THREE.MathUtils.degToRad(alpha);
+balls.push(makeBall());
 
-    if (lastEuler === null) {
-      // 首次校准：记录初始姿态
-      initOffset.setFromEuler(new THREE.Euler(0, 0, 0));
-      lastEuler = new THREE.Euler(0, 0, 0);
-    }
-
-    // 使用四元数避免万向锁
-    const euler = new THREE.Euler(betaRad, alphaRad, gammaRad, 'YXZ');
-    deviceQuat.setFromEuler(euler);
-
-    // 组合：初始偏移 * 设备旋转
-    pivot.quaternion.copy(initOffset).multiply(deviceQuat);
-    deviceOrientationAvailable = true;
+/* ── 点击检测 ── */
+const ray=new THREE.Raycaster();
+const ptr=new THREE.Vector2();
+function chkClick(cx,cy){
+  const rc=R.domElement.getBoundingClientRect();
+  ptr.x=((cx-rc.left)/rc.width)*2-1;
+  ptr.y=-((cy-rc.top)/rc.height)*2+1;
+  ray.setFromCamera(ptr,cam);
+  for(let i=0;i<balls.length;i++){
+    const its=ray.intersectObject(balls[i].mesh,true);
+    if(its.length>0&&its[0].distance<5){catchBall(i);return true}
   }
+  return false;
+}
+R.domElement.addEventListener('click',function(e){chkClick(e.clientX,e.clientY)});
 
-  // ─── 初始化 ───
-  function init() {
-    // 尝试 DeviceOrientation API
-    if (typeof DeviceOrientationEvent !== 'undefined' &&
-        typeof DeviceOrientationEvent.requestPermission === 'function') {
-      // iOS 13+ 需要用户授权
-      const btn = document.createElement('button');
-      btn.textContent = '🔍 开始探索';
-      btn.style.cssText = `
-        position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
-        padding: 20px 40px; font-size: 24px; background: #4040ff;
-        color: white; border: none; border-radius: 16px; z-index: 200;
-        font-family: -apple-system, sans-serif; font-weight: bold;
-      `;
-      document.body.appendChild(btn);
+/* ── 陀螺仪 ── */
+let gyro=false,gyroInit=false;
+const eq=new THREE.Euler(),qq=new THREE.Quaternion(),iq=new THREE.Quaternion();
+function onOri(e){
+  const be=THREE.MathUtils.degToRad(e.beta||0);
+  const ga=THREE.MathUtils.degToRad(e.gamma||0);
+  const al=THREE.MathUtils.degToRad(e.alpha||0);
+  eq.set(be,al,ga,'YXZ');qq.setFromEuler(eq);
+  if(!gyroInit){iq.copy(qq).invert();gyroInit=true;gyro=true}
+  pivot.quaternion.copy(iq).multiply(qq);
+}
 
-      btn.addEventListener('click', async () => {
-        const perm = await DeviceOrientationEvent.requestPermission();
-        if (perm === 'granted') {
-          window.addEventListener('deviceorientation', onDeviceOrientation);
-          btn.remove();
-          document.getElementById('loading').classList.add('hidden');
-        } else {
-          alert('需要陀螺仪权限才能体验 VR。请允许后刷新。');
-          btn.remove();
-        }
-      });
-    } else if (typeof DeviceOrientationEvent !== 'undefined') {
-      // 安卓等非需授权的
-      window.addEventListener('deviceorientation', onDeviceOrientation);
-      document.getElementById('loading').classList.add('hidden');
-    } else {
-      // 没有陀螺仪，用鼠标/触摸控制
-      console.warn('无陀螺仪，切换到鼠标控制');
-      enableMouseControl();
-      document.getElementById('loading').classList.add('hidden');
-    }
+/* ── 触屏/鼠标备用 ── */
+let drag=false,lx=0,ly=0,yaw=0,pt=0;
+R.domElement.addEventListener('pointerdown',function(e){drag=true;lx=e.clientX;ly=e.clientY});
+R.domElement.addEventListener('pointermove',function(e){
+  if(!drag)return;yaw-=(e.clientX-lx)*.005;pt-=(e.clientY-ly)*.005;
+  pt=Math.max(-1.2,Math.min(1.2,pt));lx=e.clientX;ly=e.clientY;
+  pivot.rotation.set(pt,yaw,0,'YXZ');
+});
+R.domElement.addEventListener('pointerup',function(){drag=false});
+
+/* ── 开始按钮 ── */
+document.getElementById('go').addEventListener('click',function(){
+  if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
+    DeviceOrientationEvent.requestPermission().then(function(p){if(p==='granted')addEventListener('deviceorientation',onOri,true)});
+  }else{addEventListener('deviceorientation',onOri,true)}
+  document.getElementById('splash').classList.add('h');
+});
+
+/* ── 动画 ── */
+let time=0;
+function animate(){
+  requestAnimationFrame(animate);
+  time+=.016;
+  for(let i=0;i<balls.length;i++){
+    const b=balls[i];
+    if(!b.mesh)continue;
+    // 浮动
+    b.mesh.position.y=b.baseY+Math.sin(time*b.speed+b.phase)*.12;
+    // 自转
+    b.mesh.rotation.y+=b.rotS*.016;
+    // 躲藏/冒出来
+    b.peek+=.016;
+    const cy=b.peek%(b.peekDur*2);
+    let s;
+    if(cy<b.peekDur){const t=cy/b.peekDur;s=.25+t*.75}
+    else{const t=(cy-b.peekDur)/b.peekDur;s=Math.max(.25,1-t*.75)}
+    b.mesh.scale.setScalar(s);
+    b.mesh.traverse(function(c){if(c.material){c.material.opacity=s;c.material.needsUpdate=true}});
   }
-
-  // ─── 备用：鼠标/触摸控制 ───
-  function enableMouseControl() {
-    let isDragging = false;
-    let prevX = 0, prevY = 0;
-    let yaw = 0, pitch = 0;
-
-    canvas = renderer.domElement;
-    canvas.addEventListener('touchstart', (e) => {
-      isDragging = true;
-      prevX = e.touches[0].clientX;
-      prevY = e.touches[0].clientY;
-    });
-    canvas.addEventListener('touchmove', (e) => {
-      if (!isDragging) return;
-      const dx = e.touches[0].clientX - prevX;
-      const dy = e.touches[0].clientY - prevY;
-      yaw -= dx * 0.005;
-      pitch -= dy * 0.005;
-      pitch = Math.max(-Math.PI/3, Math.min(Math.PI/3, pitch));
-      prevX = e.touches[0].clientX;
-      prevY = e.touches[0].clientY;
-      pivot.rotation.set(pitch, yaw, 0, 'YXZ');
-    });
-    canvas.addEventListener('touchend', () => { isDragging = false; });
-
-    // 鼠标也支持
-    canvas.addEventListener('mousedown', (e) => {
-      isDragging = true;
-      prevX = e.clientX;
-      prevY = e.clientY;
-    });
-    canvas.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-      const dx = e.clientX - prevX;
-      const dy = e.clientY - prevY;
-      yaw -= dx * 0.005;
-      pitch -= dy * 0.005;
-      pitch = Math.max(-Math.PI/3, Math.min(Math.PI/3, pitch));
-      prevX = e.clientX;
-      prevY = e.clientY;
-      pivot.rotation.set(pitch, yaw, 0, 'YXZ');
-    });
-    canvas.addEventListener('mouseup', () => { isDragging = false; });
-  }
-
-  // ─── 窗口大小调整 ───
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
-
-  // ─── 动画循环 ───
-  let time = 0;
-  const baseY = by;
-
-  function animate() {
-    requestAnimationFrame(animate);
-    time += 0.016; // ~60fps
-
-    // 毛球浮动
-    ballGroup.position.y = baseY + Math.sin(time * 2) * 0.15;
-
-    // 毛球自转
-    ballGroup.rotation.y += 0.005;
-
-    // 中心圆环微光
-    ring.material.opacity = 0.7 + Math.sin(time * 3) * 0.3;
-
-    renderer.render(scene, camera);
-  }
-
-  // ─── 启动 ───
-  init();
-  animate();
+  R.render(scene,cam);
+}
+animate();
 
 })();
 </script>
