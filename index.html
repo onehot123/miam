@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Cut - VR寻球</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+    canvas { display: block; }
+
+    /* UI 叠加层 */
+    #ui {
+      position: fixed;
+      bottom: 40px;
+      left: 0; right: 0;
+      text-align: center;
+      z-index: 10;
+      pointer-events: none;
+    }
+    #ui span {
+      display: inline-block;
+      padding: 12px 20px;
+      background: rgba(0,0,0,0.5);
+      color: #fff;
+      font-size: 16px;
+      font-family: -apple-system, "Helvetica Neue", sans-serif;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+
+    /* 加载层 */
+    #loading {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: #0a0a1e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      z-index: 100;
+      transition: opacity 0.5s;
+    }
+    #loading.hidden { opacity: 0; pointer-events: none; }
+    #loading span {
+      color: #fff;
+      font-size: 24px;
+      font-family: -apple-system, sans-serif;
+    }
+    #loading .dot {
+      display: inline-block;
+      width: 12px; height: 12px;
+      background: #6666ff;
+      border-radius: 50%;
+      margin: 20px;
+      animation: pulse 1s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.3); opacity: 0.5; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="loading">
+  <span>🔍 正在初始化 VR 空间</span>
+  <div class="dot"></div>
+</div>
+
+<div id="ui">
+  <span>🔍 转动手机寻找白色小毛球</span>
+</div>
+
+<!-- Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+// ============================================================
+// Cut - VR 360° 全景寻球
+// 纯 Three.js + DeviceOrientation API
+// ============================================================
+
+(function() {
+  'use strict';
+
+  // ─── 场景初始化 ───
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a1e);
+
+  // 相机：FOV 60，营造"潜望镜"感
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.05, 100);
+  camera.position.set(0, 0, 0);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  document.body.appendChild(renderer.domElement);
+
+  // ─── 灯光 ───
+  const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+  scene.add(ambient);
+
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  dirLight.position.set(0, -5, -2);
+  scene.add(dirLight);
+
+  // ─── 相机枢轴（陀螺仪驱动） ───
+  const pivot = new THREE.Object3D();
+  scene.add(pivot);
+  pivot.add(camera);
+
+  // ─── 房间网格 ───
+  const ROOM_HALF = 10;
+  const STEP = 2;
+  const N = 10;
+  const floorMat = new THREE.LineBasicMaterial({ color: 0x4040aa, transparent: true, opacity: 0.8 });
+  const wallMat = new THREE.LineBasicMaterial({ color: 0x282868, transparent: true, opacity: 0.5 });
+  const ceilMat = new THREE.LineBasicMaterial({ color: 0x1a1a40, transparent: true, opacity: 0.35 });
+
+  function makeLine(x1,y1,z1, x2,y2,z2, mat) {
+    const geo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(x1,y1,z1),
+      new THREE.Vector3(x2,y2,z2)
+    ]);
+    scene.add(new THREE.Line(geo, mat));
+  }
+
+  for (let i = 0; i <= N; i++) {
+    const p = -ROOM_HALF + i * STEP;
+    // 地板
+    makeLine(p, -ROOM_HALF, -ROOM_HALF, p, -ROOM_HALF, ROOM_HALF, floorMat);
+    makeLine(-ROOM_HALF, -ROOM_HALF, p, ROOM_HALF, -ROOM_HALF, p, floorMat);
+    // 天花板
+    makeLine(p, ROOM_HALF, -ROOM_HALF, p, ROOM_HALF, ROOM_HALF, ceilMat);
+    makeLine(-ROOM_HALF, ROOM_HALF, p, ROOM_HALF, ROOM_HALF, p, ceilMat);
+    // 前墙
+    makeLine(p, -ROOM_HALF, -ROOM_HALF, p, ROOM_HALF, -ROOM_HALF, wallMat);
+    makeLine(-ROOM_HALF, p, -ROOM_HALF, ROOM_HALF, p, -ROOM_HALF, wallMat);
+    // 后墙
+    makeLine(p, -ROOM_HALF, ROOM_HALF, p, ROOM_HALF, ROOM_HALF, wallMat);
+    makeLine(-ROOM_HALF, p, ROOM_HALF, ROOM_HALF, p, ROOM_HALF, wallMat);
+    // 左墙
+    makeLine(-ROOM_HALF, -ROOM_HALF, p, -ROOM_HALF, ROOM_HALF, p, wallMat);
+    makeLine(-ROOM_HALF, p, -ROOM_HALF, -ROOM_HALF, p, ROOM_HALF, wallMat);
+    // 右墙
+    makeLine(ROOM_HALF, -ROOM_HALF, p, ROOM_HALF, ROOM_HALF, p, wallMat);
+    makeLine(ROOM_HALF, p, -ROOM_HALF, ROOM_HALF, p, ROOM_HALF, wallMat);
+  }
+
+  // 中心圆环（地板标记）
+  const ringGeo = new THREE.TorusGeometry(0.4, 0.025, 8, 32);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.position.set(0, -ROOM_HALF + 0.02, 0);
+  ring.rotation.x = Math.PI / 2;
+  scene.add(ring);
+
+  // ─── 白色小毛球 ───
+  const FUR_RADIUS = 0.15;
+  const ballGroup = new THREE.Group();
+
+  // 主体
+  const bodyGeo = new THREE.SphereGeometry(FUR_RADIUS, 24, 24);
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.9,
+    metalness: 0.0
+  });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  ballGroup.add(body);
+
+  // 毛刺
+  for (let i = 0; i < 20; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.random() * Math.PI;
+    const dist = FUR_RADIUS * (1.0 + Math.random() * 0.35);
+    const spikeGeo = new THREE.SphereGeometry(FUR_RADIUS * 0.12, 6, 6);
+    const spikeMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.95
+    });
+    const spike = new THREE.Mesh(spikeGeo, spikeMat);
+    spike.position.set(
+      dist * Math.sin(phi) * Math.cos(theta),
+      dist * Math.cos(phi),
+      dist * Math.sin(phi) * Math.sin(theta)
+    );
+    ballGroup.add(spike);
+  }
+
+  // 眼睛
+  const eyeGeo = new THREE.SphereGeometry(0.018, 8, 8);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+  leftEye.position.set(-0.04, 0.03, -FUR_RADIUS * 0.88);
+  ballGroup.add(leftEye);
+
+  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+  rightEye.position.set(0.04, 0.03, -FUR_RADIUS * 0.88);
+  ballGroup.add(rightEye);
+
+  // 点光源
+  const pointLight = new THREE.PointLight(0xffffff, 1, 1.5);
+  ballGroup.add(pointLight);
+
+  // 随机位置
+  const bx = (Math.random() * 10 - 5);
+  const by = Math.random() * 7 - 3;
+  const bz = Math.random() * 6 - 5;
+  ballGroup.position.set(bx, by, bz);
+  ballGroup.rotation.y = Math.random() * Math.PI * 2;
+  scene.add(ballGroup);
+
+  // ─── 陀螺仪控制 ───
+  let deviceOrientationAvailable = false;
+  let initOffset = new THREE.Quaternion();
+  let deviceQuat = new THREE.Quaternion();
+  let lastEuler = null;
+
+  function onDeviceOrientation(event) {
+    const alpha = event.alpha || 0;   // Z 轴（0-360）
+    const beta = event.beta || 0;     // X 轴（前后 -180-180）
+    const gamma = event.gamma || 0;   // Y 轴（左右 -90-90）
+
+    // 转换为弧度
+    const gammaRad = THREE.MathUtils.degToRad(gamma);
+    const betaRad = THREE.MathUtils.degToRad(beta);
+    const alphaRad = THREE.MathUtils.degToRad(alpha);
+
+    if (lastEuler === null) {
+      // 首次校准：记录初始姿态
+      initOffset.setFromEuler(new THREE.Euler(0, 0, 0));
+      lastEuler = new THREE.Euler(0, 0, 0);
+    }
+
+    // 使用四元数避免万向锁
+    const euler = new THREE.Euler(betaRad, alphaRad, gammaRad, 'YXZ');
+    deviceQuat.setFromEuler(euler);
+
+    // 组合：初始偏移 * 设备旋转
+    pivot.quaternion.copy(initOffset).multiply(deviceQuat);
+    deviceOrientationAvailable = true;
+  }
+
+  // ─── 初始化 ───
+  function init() {
+    // 尝试 DeviceOrientation API
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      // iOS 13+ 需要用户授权
+      const btn = document.createElement('button');
+      btn.textContent = '🔍 开始探索';
+      btn.style.cssText = `
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+        padding: 20px 40px; font-size: 24px; background: #4040ff;
+        color: white; border: none; border-radius: 16px; z-index: 200;
+        font-family: -apple-system, sans-serif; font-weight: bold;
+      `;
+      document.body.appendChild(btn);
+
+      btn.addEventListener('click', async () => {
+        const perm = await DeviceOrientationEvent.requestPermission();
+        if (perm === 'granted') {
+          window.addEventListener('deviceorientation', onDeviceOrientation);
+          btn.remove();
+          document.getElementById('loading').classList.add('hidden');
+        } else {
+          alert('需要陀螺仪权限才能体验 VR。请允许后刷新。');
+          btn.remove();
+        }
+      });
+    } else if (typeof DeviceOrientationEvent !== 'undefined') {
+      // 安卓等非需授权的
+      window.addEventListener('deviceorientation', onDeviceOrientation);
+      document.getElementById('loading').classList.add('hidden');
+    } else {
+      // 没有陀螺仪，用鼠标/触摸控制
+      console.warn('无陀螺仪，切换到鼠标控制');
+      enableMouseControl();
+      document.getElementById('loading').classList.add('hidden');
+    }
+  }
+
+  // ─── 备用：鼠标/触摸控制 ───
+  function enableMouseControl() {
+    let isDragging = false;
+    let prevX = 0, prevY = 0;
+    let yaw = 0, pitch = 0;
+
+    canvas = renderer.domElement;
+    canvas.addEventListener('touchstart', (e) => {
+      isDragging = true;
+      prevX = e.touches[0].clientX;
+      prevY = e.touches[0].clientY;
+    });
+    canvas.addEventListener('touchmove', (e) => {
+      if (!isDragging) return;
+      const dx = e.touches[0].clientX - prevX;
+      const dy = e.touches[0].clientY - prevY;
+      yaw -= dx * 0.005;
+      pitch -= dy * 0.005;
+      pitch = Math.max(-Math.PI/3, Math.min(Math.PI/3, pitch));
+      prevX = e.touches[0].clientX;
+      prevY = e.touches[0].clientY;
+      pivot.rotation.set(pitch, yaw, 0, 'YXZ');
+    });
+    canvas.addEventListener('touchend', () => { isDragging = false; });
+
+    // 鼠标也支持
+    canvas.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      prevX = e.clientX;
+      prevY = e.clientY;
+    });
+    canvas.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - prevX;
+      const dy = e.clientY - prevY;
+      yaw -= dx * 0.005;
+      pitch -= dy * 0.005;
+      pitch = Math.max(-Math.PI/3, Math.min(Math.PI/3, pitch));
+      prevX = e.clientX;
+      prevY = e.clientY;
+      pivot.rotation.set(pitch, yaw, 0, 'YXZ');
+    });
+    canvas.addEventListener('mouseup', () => { isDragging = false; });
+  }
+
+  // ─── 窗口大小调整 ───
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ─── 动画循环 ───
+  let time = 0;
+  const baseY = by;
+
+  function animate() {
+    requestAnimationFrame(animate);
+    time += 0.016; // ~60fps
+
+    // 毛球浮动
+    ballGroup.position.y = baseY + Math.sin(time * 2) * 0.15;
+
+    // 毛球自转
+    ballGroup.rotation.y += 0.005;
+
+    // 中心圆环微光
+    ring.material.opacity = 0.7 + Math.sin(time * 3) * 0.3;
+
+    renderer.render(scene, camera);
+  }
+
+  // ─── 启动 ───
+  init();
+  animate();
+
+})();
+</script>
+</body>
+</html>
