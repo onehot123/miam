@@ -814,24 +814,17 @@ var _fAlpha=0;
 function onOri(e){
   if(e.alpha===null)return;
 
-  // iOS Device Orientation API conventions:
-  //   Phone held portrait, screen facing face:
-  //     beta ≈ +90° (tilt front-to-back, +90 = vertical facing you)
-  //     alpha = compass heading (Z rotation, 0-360)
-  //     gamma = tilt left-right (Y rotation, -90 to +90)
+  // Physical mapping (iOS deviceorientation, portrait held in front of face):
+  //   beta: -180~180. +90=vertical facing face. Top toward ceiling→beta↓(look up).
+  //         Top toward face→beta↑(look down).
+  //   alpha: compass heading 0-360. Relative delta = yaw.
   //
-  // Physical meaning:
-  //   Tilt phone top toward ceiling (look up) → beta DECREASES (→ 0 or negative)
-  //   Tilt phone top toward face (look down) → beta INCREASES (→ 180)
-  //   Rotate phone left (look left) → alpha changes one direction
-  //   Rotate phone right (look right) → alpha changes other direction
+  // Three.js euler 'YXZ':
+  //   Positive X (pitch) = camera looks UP
+  //   Positive Y (yaw) = camera looks RIGHT (in world frame)
   //
-  // Three.js euler 'YXZ' convention:
-  //   Positive X (pitch) = rotate around X-axis (+Y toward +Z) = camera looks UP
-  //   Positive Y (yaw) = rotate around Y-axis (+Z toward +X) = camera looks RIGHT
-  //
-  // Mapping: beta decreases (look up) → pitch should be positive
-  //          so: pitch = -delta_beta
+  // Pitch: beta decreases → look up → pitch positive → pitch = -deltaBeta ✓
+  // Yaw: direction depends on device coords. deltaAlpha as-is: test and flip sign below if wrong.
 
   var beta=THREE.MathUtils.degToRad(e.beta||0);
   var alpha=THREE.MathUtils.degToRad(e.alpha||0);
@@ -861,31 +854,26 @@ function onOri(e){
   _prevAlpha=alpha;
 
   // 2. Invert beta: look up (beta decr) → positive pitch
-  var pitch=-dBeta;
-  var yaw=dAlpha;
+  //    Yaw sign: if phone left→camera right, flip sign below on rawYaw
+  var rawPitch=-dBeta;
+  var rawYaw=dAlpha;
 
   // 3. Dead zone: ignore sub-0.5° jitter (sensor noise)
-  if(Math.abs(pitch)<THREE.MathUtils.degToRad(0.5))pitch=0;
-  if(Math.abs(yaw)<THREE.MathUtils.degToRad(0.5))yaw=0;
+  if(Math.abs(rawPitch)<THREE.MathUtils.degToRad(0.5))rawPitch=0;
+  if(Math.abs(rawYaw)<THREE.MathUtils.degToRad(0.5))rawYaw=0;
 
   // 4. Low-pass filter (0.25 weight → kills 75% of high-freq noise)
-  pitch=0.25*pitch+0.75*_fBeta;
-  yaw=0.25*yaw+0.75*_fAlpha;
-  _fBeta=pitch;_fAlpha=yaw;
+  rawPitch=0.25*rawPitch+0.75*_fBeta;
+  rawYaw=0.25*rawYaw+0.75*_fAlpha;
+  _fBeta=rawPitch;_fAlpha=rawYaw;
 
-  // 5. Invert both: pitch = -deltaBeta, yaw = -deltaAlpha
-  //    So phone tilts toward ceiling (look up) → camera looks up
-  //       Phone rotates left → camera looks left
-  pitch=-pitch;
-  yaw=-yaw;
-
-  // 6. Velocity cap: 5°/frame ≈ 300°/sec (human head turn speed)
+  // 5. Velocity cap: 5°/frame ≈ 300°/sec (human head turn speed)
   var MAX=THREE.MathUtils.degToRad(5);
-  pitch=Math.max(-MAX,Math.min(MAX,pitch));
-  yaw=Math.max(-MAX,Math.min(MAX,yaw));
+  rawPitch=Math.max(-MAX,Math.min(MAX,rawPitch));
+  rawYaw=Math.max(-MAX,Math.min(MAX,rawYaw));
 
-  // 6. Build delta quaternion (pitch first, then yaw in world frame)
-  _eulerObj.set(pitch,yaw,0,'YXZ');
+  // 6. Build delta quaternion
+  _eulerObj.set(rawPitch,rawYaw,0,'YXZ');
   _deltaQuat.setFromEuler(_eulerObj);
 
   // 7. Accumulate toward target rotation
