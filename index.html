@@ -10,7 +10,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:-ap
 #mask{position:fixed;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;z-index:10;background:#0a0a0a}
 #cvbox{position:relative;overflow:hidden;border-radius:28px;background:#000;box-shadow:0 0 80px rgba(50,50,120,.2)}
 #cvbox::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;box-shadow:inset 0 0 120px rgba(0,0,0,0.65)}
-#cvbox::after{content:'';position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 40%,rgba(10,10,20,0.5) 100%)}
+#cvbox::after{content:'';position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,0.75) 100%)}
 canvas{display:block;width:100%;height:100%;touch-action:none}
 #score{position:fixed;top:22px;right:16px;z-index:100;font-size:20px;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.7)}
 #splash{position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(180deg,#0e0e1a,#1a1a2e);transition:opacity .7s}
@@ -18,6 +18,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 #splash h1{font-size:44px;margin-bottom:8px}
 #splash p{color:rgba(255,255,255,.5);font-size:13px;text-align:center;padding:0 28px;line-height:1.7;margin:6px 0 28px}
 #splash button{padding:15px 44px;font-size:17px;border:none;border-radius:13px;background:#4a4acc;color:#fff;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(74,74,204,.35)}
+#hint{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:100;font-size:12px;color:rgba(255,255,255,.4);text-shadow:0 1px 4px rgba(0,0,0,.8);pointer-events:none}
 #toast{position:fixed;top:30%;left:50%;transform:translate(-50%,-50%);z-index:150;pointer-events:none;color:#fff;font-size:22px;font-weight:700;text-shadow:0 2px 20px rgba(0,0,0,.8);opacity:0;transition:opacity .3s}
 #toast.show{opacity:1}
 </style>
@@ -25,6 +26,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 <body>
 <div id="splash"><h1>🐾 Cut</h1><p>抬头！小毛球藏在高处的角落里<br>看到就点它抓住</p><button id="go">开始寻找毛球</button></div>
 <div id="score"></div>
+<div id="hint">双指缩放调节视角 · 滑动旋转 · 点击毛球抓取</div>
 <div id="toast"></div>
 <div id="flash"></div>
 <div id="mask"><div id="cvbox"></div></div>
@@ -145,9 +147,9 @@ function createPaintingTexture(seed){
 // === Scene Setup ===
 var scene=new THREE.Scene();
 scene.background=new THREE.Color(0x1a1a2e);
-scene.fog=new THREE.Fog(0x2a2a4a,3,18);
+scene.fog=new THREE.Fog(0x1a1a2e,0.02,20);
 
-var cam=new THREE.PerspectiveCamera(55,1,.05,60);
+var cam=new THREE.PerspectiveCamera(50,1,.05,60);
 cam.position.y=EYE;
 var pivot=new THREE.Object3D();
 pivot.position.y=EYE;
@@ -495,15 +497,39 @@ updateScore();
 // === Tap-to-Catch on Canvas ===
 var tapRay=new THREE.Raycaster();
 
-// === Device Orientation (Gyro) ===
+// === VR-safe Gyro with damping & smoothing ===
 var gyroInit=false;
+var gyroSmoothYaw=0,gyroSmoothPitch=0;
+var gyroCurrentYaw=0,gyroCurrentPitch=0;
+var useGyro=false;
 var euler=new THREE.Euler(),quat=new THREE.Quaternion(),initQ=new THREE.Quaternion();
+
 function onOri(e){
   if(e.alpha===null)return;
-  var be=THREE.MathUtils.degToRad(e.beta||0),ga=THREE.MathUtils.degToRad(e.gamma||0),al=THREE.MathUtils.degToRad(e.alpha||0);
-  euler.set(be,al,ga,'YXZ');quat.setFromEuler(euler);
-  if(!gyroInit){initQ.copy(quat).invert();gyroInit=true}
-  pivot.quaternion.copy(initQ).multiply(quat);
+  // Clamp beta (tilt forward/back) to prevent flipping
+  var beta=e.beta||0;
+  var clampedBeta=Math.max(-45,Math.min(45,beta));
+  var ga=e.gamma||0;
+  var al=e.alpha||0;
+  euler.set(THREE.MathUtils.degToRad(clampedBeta),THREE.MathUtils.degToRad(al),THREE.MathUtils.degToRad(ga),'YXZ');
+  quat.setFromEuler(euler);
+  if(!gyroInit){
+    initQ.copy(quat).invert();
+    gyroSmoothYaw=0;
+    gyroSmoothPitch=0;
+    gyroInit=true;
+    useGyro=true;
+  }
+  var targetQuat=quat.clone().multiply(initQ);
+  var targetEuler=new THREE.Euler().setFromQuaternion(targetQuat,'YXZ');
+  gyroCurrentYaw=targetEuler.y;
+  gyroCurrentPitch=targetEuler.x;
+  // Smooth lerp (VR-safe: max 30% per frame change)
+  var lerpFactor=0.12;
+  gyroSmoothYaw=gyroSmoothYaw+(gyroCurrentYaw-gyroSmoothYaw)*lerpFactor;
+  gyroSmoothPitch=gyroSmoothPitch+(gyroCurrentPitch-gyroSmoothPitch)*lerpFactor;
+  // Apply smooth rotation
+  pivot.rotation.set(gyroSmoothPitch,gyroSmoothYaw,0,'YXZ');
 }
 
 // Touch fallback for camera control (pan)
@@ -514,7 +540,7 @@ REN.domElement.addEventListener('pointerdown',function(e){
 });
 REN.domElement.addEventListener('pointermove',function(e){
   if(!drag)return;
-  yaw-=(e.clientX-lx)*.004;pt-=(e.clientY-ly)*.004;
+  yaw-=(e.clientX-lx)*.003;pt-=(e.clientY-ly)*.003;
   pt=Math.max(-1.4,Math.min(1.4,pt));
   lx=e.clientX;ly=e.clientY;
   pivot.rotation.set(pt,yaw,0,'YXZ');
@@ -544,6 +570,30 @@ REN.domElement.addEventListener('pointerup',function(e){
     }
   }
 });
+
+// === Pinch-to-Zoom (FOV control) ===
+var pinchDist=0,currentFov=50;
+REN.domElement.addEventListener('touchstart',function(e){
+  if(e.touches.length===2){
+    var t1=e.touches[0],t2=e.touches[1];
+    pinchDist=Math.sqrt((t2.clientX-t1.clientX)*(t2.clientX-t1.clientX)+(t2.clientY-t1.clientY)*(t2.clientY-t1.clientY));
+  }
+},{passive:true});
+REN.domElement.addEventListener('touchmove',function(e){
+  if(e.touches.length===2){
+    var t1=e.touches[0],t2=e.touches[1];
+    var newDist=Math.sqrt((t2.clientX-t1.clientX)*(t2.clientX-t1.clientX)+(t2.clientY-t1.clientY)*(t2.clientY-t1.clientY));
+    var delta=newDist-pinchDist;
+    currentFov-=delta*0.15;
+    currentFov=Math.max(25,Math.min(70,currentFov));
+    cam.fov=currentFov;
+    cam.updateProjectionMatrix();
+    pinchDist=newDist;
+  }
+},{passive:true});
+REN.domElement.addEventListener('touchend',function(e){
+  if(e.touches.length<2)pinchDist=0;
+},{passive:true});
 
 // === Start Game ===
 document.getElementById('go').addEventListener('click',function(){
