@@ -807,6 +807,9 @@ var _deltaQuat=new THREE.Quaternion();
 var _touchQuat=new THREE.Quaternion();
 var _prevBeta=0;
 var _prevAlpha=0;
+// Low-pass filter for gyro deltas
+var _fBeta=0;
+var _fAlpha=0;
 
 function onOri(e){
   if(e.alpha===null)return;
@@ -815,17 +818,18 @@ function onOri(e){
   var alpha=THREE.MathUtils.degToRad(e.alpha||0);
 
   if(!gyroInit){
-    // Store initial raw values, set initQuat as identity
     _prevBeta=beta;
     _prevAlpha=alpha;
-    _initQuat.set(0,0,0,1); // identity — our "zero" reference
+    _fBeta=0;_fAlpha=0;
+    _initQuat.set(0,0,0,1);
     _smoothQuat.set(0,0,0,1);
+    _targetQuat.set(0,0,0,1);
     pivot.quaternion.copy(_smoothQuat);
     gyroInit=true;
     return;
   }
 
-  // Compute angle deltas (with 360° wrap-around correction)
+  // 1. Raw delta with 360° wrap-around
   var dBeta=beta-_prevBeta;
   var dAlpha=alpha-_prevAlpha;
 
@@ -834,24 +838,32 @@ function onOri(e){
   if(dAlpha>Math.PI)dAlpha-=Math.PI*2;
   if(dAlpha<-Math.PI)dAlpha+=Math.PI*2;
 
-  // Angular velocity cap: max 45° per frame at 60fps ≈ 2700°/sec
-  // Human heads can turn ~200-300°/sec, we allow a bit more for phone
-  var MAX_DELTA=THREE.MathUtils.degToRad(45);
-  dBeta=Math.max(-MAX_DELTA,Math.min(MAX_DELTA,dBeta));
-  dAlpha=Math.max(-MAX_DELTA,Math.min(MAX_DELTA,dAlpha));
-
   _prevBeta=beta;
   _prevAlpha=alpha;
 
-  // Build delta quaternion: pitch first (X), then yaw (Y)
-  // Using 'YXZ' so the yaw is applied in the world frame (not tilted frame)
-  _eulerObj.set(dBeta,dAlpha,0,'YXZ');
+  // 2. Dead zone: ignore sub-0.3° jitter (sensor noise)
+  if(Math.abs(dBeta)<THREE.MathUtils.degToRad(0.3))dBeta=0;
+  if(Math.abs(dAlpha)<THREE.MathUtils.degToRad(0.3))dAlpha=0;
+
+  // 3. Low-pass filter (0.25 weight → kills 75% of high-freq noise)
+  _fBeta=0.25*dBeta+0.75*_fBeta;
+  _fAlpha=0.25*dAlpha+0.75*_fAlpha;
+
+  // 4. Velocity cap: 5°/frame ≈ 300°/sec (human head turn speed)
+  var MAX=THREE.MathUtils.degToRad(5);
+  _fBeta=Math.max(-MAX,Math.min(MAX,_fBeta));
+  _fAlpha=Math.max(-MAX,Math.min(MAX,_fAlpha));
+
+  // 5. Build delta quaternion
+  _eulerObj.set(_fBeta,_fAlpha,0,'YXZ');
   _deltaQuat.setFromEuler(_eulerObj);
 
-  // Apply delta to current accumulated rotation
-  _smoothQuat.multiply(_deltaQuat);
+  // 6. Accumulate toward target rotation
+  _targetQuat.multiply(_deltaQuat);
+  _targetQuat.normalize();
 
-  // Normalize to prevent drift
+  // 7. Slerp from current position → target (15%/frame = inertia feel)
+  _smoothQuat.slerp(_targetQuat,0.15);
   _smoothQuat.normalize();
 
   pivot.quaternion.copy(_smoothQuat);
