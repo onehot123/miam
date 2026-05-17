@@ -21,8 +21,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 #shareInner h2{color:#fff;font-size:22px;margin:0 0 6px}
 #shareInner .share-sub{color:rgba(255,255,255,0.5);font-size:13px;margin:0 0 16px}
 #shareInner .share-msg{color:rgba(255,255,255,0.8);font-size:15px;line-height:1.6;margin:0 0 20px;padding:0 4px}
-#shareInner .share-stats{display:flex;justify-content:center;gap:24px;margin:0 0 20px}
-#shareInner .share-stat{text-align:center}
+#shareInner .share-stats{display:flex;justify-content:center;gap:16px;margin:0 0 20px}
+#shareInner .share-stat{text-align:center;padding:0 4px;border-right:1px solid rgba(255,255,255,0.1)}
+#shareInner .share-stat:last-child{border-right:none}
 #shareInner .share-stat .val{font-size:28px;font-weight:700;color:#fff}
 #shareInner .share-stat .lbl{font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px}
 #shareInner .share-actions{display:flex;gap:10px;justify-content:center}
@@ -614,6 +615,28 @@ function formatTime(ms){
   return m>0?m+'分'+sec+'秒':sec+'秒';
 }
 
+/**
+ * Compute "beat X% of people" from elapsed time.
+ *
+ * Model: most players finish in 30-120s, outliers 10s-5min.
+ * Using a log-normal-like CDF that maps time → percentile.
+ * Design goals:
+ *  - 100% at 0s → 0% at infinity (monotonically decreasing)
+ *  - 20s → ~95th percentile (feels legendary)
+ *  - 40s → ~80th (impressive)
+ *  - 60s → ~50th (median, feels fair)
+ *  - 90s → ~20th (struggled but still shareable)
+ *  - 180s → ~5th (near bottom)
+ *  Formula: percentile = 100 * exp( - (t/45)^1.8 )
+ *  This gives a nice sigmoidal decay on log scale.
+ */
+function calcPercentile(ms){
+  var t=ms/1000; // seconds
+  if(t<=3)return 100;
+  var p=100*Math.exp(-Math.pow(t/45,1.8));
+  return Math.max(1,Math.min(99,Math.round(p)));
+}
+
 function showToast(msg){toastEl.textContent=msg;toastEl.classList.add('show');setTimeout(function(){toastEl.classList.remove('show')},1500)}
 
 function endGame(allCaught){
@@ -623,27 +646,33 @@ function endGame(allCaught){
   if(timerInterval)clearInterval(timerInterval);
 
   var elapsed=gameEndTime-gameStartTime;
+  var percentile=calcPercentile(elapsed);
   var allCaughtBool=allCaught && caught>=bCount;
 
-  // Choose message
   var shareMsg,shareTitle;
+
   if(allCaughtBool){
-    if(elapsed<30000){
-      shareTitle='🐾 颈椎灵活度之王！';
-      shareMsg='我仅用【'+formatTime(elapsed)+'】就抓齐了所有高空毛球！拥有人类高质量颈椎！快来挑战我的纪录！🔥';
-    }else if(elapsed<60000){
-      shareTitle='🐾 优秀颈椎！';
-      shareMsg='我用了【'+formatTime(elapsed)+'】找齐了全部毛球。颈椎灵活度击败了全网70%的打工人！你也来试试？';
-    }else if(elapsed<120000){
-      shareTitle='🐾 颈椎灵活度合格！';
-      shareMsg='我用了【'+formatTime(elapsed)+'】才找齐毛球，已确诊为中度颈椎僵硬患者。快来帮我报仇！😂';
+    // Completed: rank-based percentile message
+    if(percentile>=95){
+      shareTitle='🏆 颈椎灵活度天花板！';
+      shareMsg='我仅用【'+formatTime(elapsed)+'】抓齐毛球，击败了'+percentile+'%的人！你行你上！🔥';
+    }else if(percentile>=80){
+      shareTitle='🐾 颈椎灵活度优秀！';
+      shareMsg='我用了【'+formatTime(elapsed)+'】找齐毛球，击败了'+percentile+'%的人。快来挑战！';
+    }else if(percentile>=50){
+      shareTitle='🐾 表现还不错！';
+      shareMsg='我用了【'+formatTime(elapsed)+'】找齐毛球，击败了'+percentile+'%的人。有没有更快的？';
+    }else if(percentile>=20){
+      shareTitle='🐾 颈椎有些僵硬…';
+      shareMsg='我用了【'+formatTime(elapsed)+'】才找齐，只击败了'+percentile+'%的人。快来帮我报仇！';
     }else{
       shareTitle='🐾 重度颈椎僵硬患者';
-      shareMsg='我用了【'+formatTime(elapsed)+'】才找齐毛球，已经快不会转头了…猜你也过不了第一关 😅';
+      shareMsg='我用了【'+formatTime(elapsed)+'】才找齐毛球，只击败了'+percentile+'%的人。猜你也过不了第一关 😅';
     }
   }else{
+    // Not completed: time-based message
     shareTitle='🐾 游戏终止';
-    shareMsg='找了【'+formatTime(elapsed)+'】，抓到'+caught+'/'+TOTAL+'个毛球就放弃了。颈椎僵硬治疗中…再来一次？🤖';
+    shareMsg='找了【'+formatTime(elapsed)+'】，只抓到'+caught+'/'+TOTAL+'个就放弃了。颈椎僵硬治疗中…再来一次？🤖';
   }
 
   // Show share card
@@ -654,6 +683,7 @@ function endGame(allCaught){
     '<div class="share-stats">'+
       '<div class="share-stat"><div class="val">'+caught+'/'+TOTAL+'</div><div class="lbl">毛球</div></div>'+
       '<div class="share-stat"><div class="val">'+formatTime(elapsed)+'</div><div class="lbl">用时</div></div>'+
+      '<div class="share-stat"><div class="val">'+percentile+'%</div><div class="lbl">排名</div></div>'+
     '</div>'+
     '<div class="share-actions">'+
       '<button class="btn-copy" onclick="copyLink()">📋 复制链接</button>'+
