@@ -468,6 +468,18 @@ var gameEndTime=null;
 var timerInterval=null;
 var gameEnded=false;
 
+// Running balls dodge messages
+var DODGE_MSGS=[
+  '嘿，我跑了！来抓我呀~',
+  '抓不到我抓不到我~',
+  '太慢啦太慢啦~',
+  '哈哈，你追不上我！',
+  '我是风一样的毛球🌪️',
+  '再快一点再快一点~',
+  '想抓我？没门！',
+  '哎呀差一点点！再来！'
+];
+
 var BALL_POS=[
   {x:4.5,y:7,z:-4.5},{x:-4.5,y:8.5,z:4},{x:0,y:9,z:-5.5},
   {x:-5.5,y:6.5,z:-2},{x:5.5,y:7.5,z:2},{x:0,y:8.5,z:0},
@@ -694,13 +706,38 @@ document.getElementById('go').addEventListener('click',function(){
 
 // (no flee needed - tap to catch)
 
-var bCount=Math.min(TOTAL,BALL_POS.length);
+// === Shuffle and place balls ===
+// First 2 balls: stationary, positions randomized every game
+// Balls 3-5: run away when tapped, random positions
+// All positions selected randomly from BALL_POS
+var shuffled=[];
+for(var i=0;i<BALL_POS.length;i++) shuffled.push(BALL_POS[i]);
+for(var i=shuffled.length-1;i>0;i--){
+  var j=Math.floor(Math.random()*(i+1));
+  var tmp=shuffled[i];shuffled[i]=shuffled[j];shuffled[j]=tmp;
+}
+
+var bCount=Math.min(TOTAL,shuffled.length);
 for(var bi=0;bi<bCount;bi++){
-  var mesh=makeBall(),pos=BALL_POS[bi];
+  var mesh=makeBall(),pos=shuffled[bi];
   mesh.position.set(pos.x,pos.y,pos.z);
   scene.add(mesh);
-  balls.push({mesh:mesh,alive:true,baseY:pos.y,phase:Math.random()*Math.PI*2,
-    speed:.8+Math.random()*.6,rotS:.2+Math.random()*.3});
+  balls.push({
+    mesh:mesh,
+    alive:true,
+    baseY:pos.y,
+    phase:Math.random()*Math.PI*2,
+    speed:.8+Math.random()*.6,
+    rotS:.2+Math.random()*.3,
+    // First 2 balls: stationary. Balls 3+: running
+    running:bi>=2,
+    // Running ball state
+    moveTimer:0,
+    moveInterval:3+Math.random()*4, // 3~7s between movements
+    moveDir:new THREE.Vector3((Math.random()-.5)*2,0,(Math.random()-.5)*2),
+    moveRadius:0.3+Math.random()*0.4,
+    moveCenter:{x:pos.x,z:pos.z} // remember original center
+  });
   // First ball: create icon from it
   if(bi===0)createBallIcon(mesh);
 }
@@ -800,14 +837,29 @@ REN.domElement.addEventListener('pointerup',function(e){
       if(!b.alive)continue;
       var hits=tapRay.intersectObject(b.mesh,true);
       if(hits.length>0){
-        b.alive=false;scene.remove(b.mesh);
-        caught++;updateScore();
-        flashEl.style.opacity='1';setTimeout(function(){flashEl.style.opacity='0'},300);
-        if(caught>=bCount){
-          showToast('🐾 全部抓到！太厉害了！');
-          setTimeout(function(){endGame(true)},800);
+        if(b.running){
+          // Running ball dodges: move it to a new random position, keep it alive
+          var dx=(Math.random()-.5)*3;
+          var dz=(Math.random()-.5)*3;
+          var newY=b.baseY+Math.random()*2-0.5;
+          b.mesh.position.x=b.moveCenter.x+dx;
+          b.mesh.position.z=b.moveCenter.z+dz;
+          b.moveTimer=0;
+          b.moveInterval=3+Math.random()*4;
+          showToast(DODGE_MSGS[Math.floor(Math.random()*DODGE_MSGS.length)]);
+          flashEl.style.opacity='1';
+          setTimeout(function(){flashEl.style.opacity='0'},300);
         }else{
-          showToast('🐾 抓到1只！还剩'+(bCount-caught)+'只');
+          // Stationary ball: caught
+          b.alive=false;scene.remove(b.mesh);
+          caught++;updateScore();
+          flashEl.style.opacity='1';setTimeout(function(){flashEl.style.opacity='0'},300);
+          if(caught>=bCount){
+            showToast('🐾 全部抓到！太厉害了！');
+            setTimeout(function(){endGame(true)},800);
+          }else{
+            showToast('🐾 抓到1只！还剩'+(bCount-caught)+'只');
+          }
         }
         break;
       }
@@ -853,14 +905,34 @@ var time=0;
 function animate(){
   requestAnimationFrame(animate);time+=.016;
 
-  // Ball idle animation only
+  // Ball animation
   for(var i=0;i<balls.length;i++){
     var b=balls[i];
     if(!b.alive||!b.mesh)continue;
+
+    // Idle bobbing animation
     b.mesh.position.y=b.baseY+Math.sin(time*b.speed+b.phase)*.1;
     b.mesh.rotation.y+=b.rotS*.016;
     var br=1+Math.sin(time*2+b.phase)*.05;
     b.mesh.scale.setScalar(br);
+
+    // Running balls: move around periodically
+    if(b.running){
+      b.moveTimer+=.016;
+      if(b.moveTimer>=b.moveInterval){
+        b.moveTimer=0;
+        b.moveDir.set((Math.random()-.5)*2,0,(Math.random()-.5)*2).normalize();
+        b.moveRadius=.3+Math.random()*.4;
+        b.moveCenter={x:b.mesh.position.x,z:b.mesh.position.z};
+      }
+      // Smooth movement toward target offset
+      var targetX=b.moveCenter.x+b.moveDir.x*b.moveRadius;
+      var targetZ=b.moveCenter.z+b.moveDir.z*b.moveRadius;
+      b.mesh.position.x+=(targetX-b.mesh.position.x)*.02;
+      b.mesh.position.z+=(targetZ-b.mesh.position.z)*.02;
+      // Also vary baseY slightly for running balls
+      b.baseY+=Math.sin(time*1.5+i)*.001;
+    }
   }
 
   REN.render(scene,cam);
