@@ -749,9 +749,11 @@ function onOri(e){
   // Clamp to avoid extreme orientations
   beta=Math.max(-Math.PI/2.5,Math.min(Math.PI/2.5,beta));
 
-  // Euler order 'YXZ': Y=yaw(alpha), X=pitch(-beta), Z=roll(-gamma)
-  // Inverting beta: looking up (positive beta) → pitch negative (look down in scene)
-  _eulerObj.set(-beta,alpha,-gamma,'YXZ');
+  // Euler order 'YXZ': Y=yaw(alpha), X=pitch(beta), Z=roll(-gamma)
+  // beta increases when tilting forward (phone top closer) = look up in scene
+  // beta decreases when tilting back (phone top away) = look down in scene
+  // This matches VR: you tilt phone toward you to look up
+  _eulerObj.set(beta,alpha,-gamma,'YXZ');
   _deviceQuat.setFromEuler(_eulerObj);
 
   if(!gyroInit){
