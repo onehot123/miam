@@ -13,6 +13,22 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:-ap
 #cvbox::after{content:'';position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,0.75) 100%)}
 canvas{display:block;width:100%;height:100%;touch-action:none}
 #score{position:fixed;top:14px;right:12px;z-index:100;width:70px;height:28px;background:rgba(20,20,40,0.75);border-radius:8px;border:1px solid rgba(255,255,255,0.1)}
+#stopBtn{position:fixed;top:14px;left:12px;z-index:100;width:32px;height:32px;border-radius:50%;background:rgba(20,20,40,0.75);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.7);font-size:16px;cursor:pointer;display:none;align-items:center;justify-content:center}
+#timer{position:fixed;top:14px;left:54px;z-index:100;font-size:14px;color:rgba(255,255,255,0.8);font-weight:600;display:none;font-variant-numeric:tabular-nums}
+#shareCard{position:fixed;top:0;left:0;right:0;bottom:0;z-index:500;background:rgba(0,0,0,0.85);display:none;align-items:center;justify-content:center;overflow-y:auto}
+#shareCard.show{display:flex}
+#shareInner{background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:20px;padding:28px 24px;max-width:340px;width:85%;text-align:center;margin:20px}
+#shareInner h2{color:#fff;font-size:22px;margin:0 0 6px}
+#shareInner .share-sub{color:rgba(255,255,255,0.5);font-size:13px;margin:0 0 16px}
+#shareInner .share-msg{color:rgba(255,255,255,0.8);font-size:15px;line-height:1.6;margin:0 0 20px;padding:0 4px}
+#shareInner .share-stats{display:flex;justify-content:center;gap:24px;margin:0 0 20px}
+#shareInner .share-stat{text-align:center}
+#shareInner .share-stat .val{font-size:28px;font-weight:700;color:#fff}
+#shareInner .share-stat .lbl{font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px}
+#shareInner .share-actions{display:flex;gap:10px;justify-content:center}
+#shareInner .share-actions button{padding:12px 24px;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer}
+#shareInner .btn-copy{background:#4a4acc;color:#fff}
+#shareInner .btn-retry{background:rgba(255,255,255,0.1);color:#fff}
 #splash{position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(180deg,#0e0e1a,#1a1a2e);transition:opacity .7s}
 #splash.h{opacity:0;pointer-events:none}
 #splash h1{font-size:44px;margin-bottom:8px}
@@ -26,9 +42,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 <body>
 <div id="splash"><h1>🐾 Cut</h1><p>抬头！小毛球藏在高处的角落里<br>看到就点它抓住</p><button id="go">开始寻找毛球</button></div>
 <canvas id="score"></canvas>
+<button id="stopBtn">✕</button>
+<div id="timer"></div>
 <div id="hint">双指缩放调节视角 · 滑动旋转 · 点击毛球抓取</div>
 <div id="toast"></div>
 <div id="flash"></div>
+<div id="shareCard"><div id="shareInner"></div></div>
 <div id="mask"><div id="cvbox"></div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -449,6 +468,14 @@ scoreEl.style.height='28px';
 var scoreCtx=scoreEl.getContext('2d');
 var toastEl=document.getElementById('toast');
 var flashEl=document.getElementById('flash');
+var stopBtn=document.getElementById('stopBtn');
+var timerEl=document.getElementById('timer');
+var shareEl=document.getElementById('shareCard');
+var shareInner=document.getElementById('shareInner');
+var gameStartTime=null;
+var gameEndTime=null;
+var timerInterval=null;
+var gameEnded=false;
 
 var BALL_POS=[
   {x:4.5,y:7,z:-4.5},{x:-4.5,y:8.5,z:4},{x:0,y:9,z:-5.5},
@@ -577,7 +604,102 @@ function updateScore(){
   ctx.textBaseline='middle';
   ctx.fillText(caught+'/'+TOTAL,35,h/2+1);
 }
+function formatTime(ms){
+  var s=Math.floor(ms/1000);
+  var m=Math.floor(s/60);
+  var sec=s%60;
+  return m>0?m+'分'+sec+'秒':sec+'秒';
+}
+
 function showToast(msg){toastEl.textContent=msg;toastEl.classList.add('show');setTimeout(function(){toastEl.classList.remove('show')},1500)}
+
+function endGame(allCaught){
+  if(gameEnded)return;
+  gameEnded=true;
+  gameEndTime=Date.now();
+  if(timerInterval)clearInterval(timerInterval);
+
+  var elapsed=gameEndTime-gameStartTime;
+  var allCaughtBool=allCaught && caught>=bCount;
+
+  // Choose message
+  var shareMsg,shareTitle;
+  if(allCaughtBool){
+    if(elapsed<30000){
+      shareTitle='🐾 颈椎灵活度之王！';
+      shareMsg='我仅用【'+formatTime(elapsed)+'】就抓齐了所有高空毛球！拥有人类高质量颈椎！快来挑战我的纪录！🔥';
+    }else if(elapsed<60000){
+      shareTitle='🐾 优秀颈椎！';
+      shareMsg='我用了【'+formatTime(elapsed)+'】找齐了全部毛球。颈椎灵活度击败了全网70%的打工人！你也来试试？';
+    }else if(elapsed<120000){
+      shareTitle='🐾 颈椎灵活度合格！';
+      shareMsg='我用了【'+formatTime(elapsed)+'】才找齐毛球，已确诊为中度颈椎僵硬患者。快来帮我报仇！😂';
+    }else{
+      shareTitle='🐾 重度颈椎僵硬患者';
+      shareMsg='我用了【'+formatTime(elapsed)+'】才找齐毛球，已经快不会转头了…猜你也过不了第一关 😅';
+    }
+  }else{
+    shareTitle='🐾 游戏终止';
+    shareMsg='找了【'+formatTime(elapsed)+'】，抓到'+caught+'/'+TOTAL+'个毛球就放弃了。颈椎僵硬治疗中…再来一次？🤖';
+  }
+
+  // Show share card
+  shareInner.innerHTML=
+    '<h2>'+shareTitle+'</h2>'+
+    '<p class="share-sub">AR 高空寻球挑战</p>'+
+    '<p class="share-msg">'+shareMsg+'</p>'+
+    '<div class="share-stats">'+
+      '<div class="share-stat"><div class="val">'+caught+'/'+TOTAL+'</div><div class="lbl">毛球</div></div>'+
+      '<div class="share-stat"><div class="val">'+formatTime(elapsed)+'</div><div class="lbl">用时</div></div>'+
+    '</div>'+
+    '<div class="share-actions">'+
+      '<button class="btn-copy" onclick="copyLink()">📋 复制链接</button>'+
+      '<button class="btn-retry" onclick="retryGame()">🔄 再来一次</button>'+
+    '</div>';
+  shareEl.classList.add('show');
+}
+
+window.copyLink=function(){
+  var url=location.href;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(function(){
+      showToast('✅ 链接已复制');
+    });
+  }else{
+    var ta=document.createElement('textarea');ta.value=url;
+    document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');document.body.removeChild(ta);
+    showToast('✅ 链接已复制');
+  }
+};
+
+window.retryGame=function(){
+  shareEl.classList.remove('show');
+  location.reload();
+};
+
+// === Stop Button ===
+stopBtn.addEventListener('click',function(){
+  endGame(false);
+});
+
+// === Start Game ===
+document.getElementById('go').addEventListener('click',function(){
+  gameStartTime=Date.now();
+  gameEnded=false;
+  if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
+    DeviceOrientationEvent.requestPermission().then(function(p){if(p==='granted')addEventListener('deviceorientation',onOri,true)});
+  }else{addEventListener('deviceorientation',onOri,true)}
+  document.getElementById('splash').classList.add('h');
+  setTimeout(function(){document.getElementById('splash').style.display='none'},800);
+  // Show stop button and timer
+  stopBtn.style.display='flex';
+  timerEl.style.display='block';
+  timerInterval=setInterval(function(){
+    var elapsed=Date.now()-gameStartTime;
+    timerEl.textContent=formatTime(elapsed);
+  },100);
+});
 
 // (no flee needed - tap to catch)
 
@@ -675,8 +797,12 @@ REN.domElement.addEventListener('pointerup',function(e){
         b.alive=false;scene.remove(b.mesh);
         caught++;updateScore();
         flashEl.style.opacity='1';setTimeout(function(){flashEl.style.opacity='0'},300);
-        if(caught>=bCount)showToast('🐾 全部抓到！太厉害了！');
-        else showToast('🐾 抓到1只！还剩'+(bCount-caught)+'只');
+        if(caught>=bCount){
+          showToast('🐾 全部抓到！太厉害了！');
+          setTimeout(function(){endGame(true)},800);
+        }else{
+          showToast('🐾 抓到1只！还剩'+(bCount-caught)+'只');
+        }
         break;
       }
     }
