@@ -484,21 +484,55 @@ function makeBall(){
   return g;
 }
 
+var ballIconImg=null;
+var ballIconCanvas=null;
+
+function createBallIcon(ballMesh){
+  // Create an offscreen 3D scene with the exact same ball, render it to canvas
+  ballIconCanvas=document.createElement('canvas');
+  ballIconCanvas.width=52;
+  ballIconCanvas.height=52;
+  ballIconCanvas.style.width='52px';
+  ballIconCanvas.style.height='52px';
+  ballIconCanvas.style.display='none';
+  document.body.appendChild(ballIconCanvas);
+
+  // Mini renderer for icon
+  var miniScene=new THREE.Scene();
+  miniScene.background=new THREE.Color(0x000000);
+  var miniCam=new THREE.PerspectiveCamera(40,1,0.01,20);
+  miniCam.position.set(0,0,1.2);
+  var miniRenderer=new THREE.WebGLRenderer({canvas:ballIconCanvas,alpha:true,preserveDrawingBuffer:true});
+  miniRenderer.setSize(52,52);
+  miniRenderer.setPixelRatio(1);
+  miniRenderer.toneMapping=REN.toneMapping;
+  miniRenderer.toneMappingExposure=REN.toneMappingExposure;
+
+  // Add ball mesh to mini scene (clone with same materials)
+  var iconBall=ballMesh.clone(true);
+  // Scale up a bit to fill the canvas
+  iconBall.scale.setScalar(2.5);
+  miniScene.add(iconBall);
+
+  // Copy lights from main scene for same look
+  miniScene.add(new THREE.AmbientLight(0xfff5e0,0.4));
+  miniScene.add(new THREE.DirectionalLight(0xffffff,0.5));
+
+  // Render a still frame
+  miniRenderer.render(miniScene,miniCam);
+  // Convert to image
+  ballIconImg=ballIconCanvas;
+
+  // Update score immediately
+  updateScore();
+}
+
 function updateScore(){
   var ctx=scoreCtx;
   var w=scoreEl.width,h=scoreEl.height;
   ctx.clearRect(0,0,w,h);
-  // Ball icon (fuzzy circle)
-  var cx=18,cy=h/2,cr=11;
-  ctx.beginPath();
-  for(var i=0;i<12;i++){
-    var a=i/12*Math.PI*2;
-    var r=i%2===0?cr:cr*0.7;
-    ctx.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r);
-  }
-  ctx.closePath();
-  ctx.fillStyle='#fff';
-  ctx.fill();
+  // Draw the actual 3D ball icon (52x52 canvas)
+  if(ballIconImg)ctx.drawImage(ballIconImg,4,h/2-10,20,20);
   // Slash
   ctx.strokeStyle='rgba(255,255,255,0.5)';
   ctx.lineWidth=1.5;
@@ -524,6 +558,8 @@ for(var bi=0;bi<bCount;bi++){
   scene.add(mesh);
   balls.push({mesh:mesh,alive:true,baseY:pos.y,phase:Math.random()*Math.PI*2,
     speed:.8+Math.random()*.6,rotS:.2+Math.random()*.3});
+  // First ball: create icon from it
+  if(bi===0)createBallIcon(mesh);
 }
 updateScore();
 
