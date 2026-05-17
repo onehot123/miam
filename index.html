@@ -161,9 +161,9 @@ scene.background=new THREE.Color(0x1a1a2e);
 scene.fog=new THREE.Fog(0x1a1a2e,0.02,20);
 
 var cam=new THREE.PerspectiveCamera(65,1,.05,60);
-cam.position.y=EYE;
+cam.position.y=0; // pivot IS the eye point
 var pivot=new THREE.Object3D();
-pivot.position.y=EYE;
+pivot.position.y=EYE; // pivot world position = eye height
 scene.add(pivot);
 pivot.add(cam);
 
@@ -814,6 +814,25 @@ var _fAlpha=0;
 function onOri(e){
   if(e.alpha===null)return;
 
+  // iOS Device Orientation API conventions:
+  //   Phone held portrait, screen facing face:
+  //     beta ≈ +90° (tilt front-to-back, +90 = vertical facing you)
+  //     alpha = compass heading (Z rotation, 0-360)
+  //     gamma = tilt left-right (Y rotation, -90 to +90)
+  //
+  // Physical meaning:
+  //   Tilt phone top toward ceiling (look up) → beta DECREASES (→ 0 or negative)
+  //   Tilt phone top toward face (look down) → beta INCREASES (→ 180)
+  //   Rotate phone left (look left) → alpha changes one direction
+  //   Rotate phone right (look right) → alpha changes other direction
+  //
+  // Three.js euler 'YXZ' convention:
+  //   Positive X (pitch) = rotate around X-axis (+Y toward +Z) = camera looks UP
+  //   Positive Y (yaw) = rotate around Y-axis (+Z toward +X) = camera looks RIGHT
+  //
+  // Mapping: beta decreases (look up) → pitch should be positive
+  //          so: pitch = -delta_beta
+
   var beta=THREE.MathUtils.degToRad(e.beta||0);
   var alpha=THREE.MathUtils.degToRad(e.alpha||0);
 
@@ -841,28 +860,39 @@ function onOri(e){
   _prevBeta=beta;
   _prevAlpha=alpha;
 
-  // 2. Dead zone: ignore sub-0.3° jitter (sensor noise)
-  if(Math.abs(dBeta)<THREE.MathUtils.degToRad(0.3))dBeta=0;
-  if(Math.abs(dAlpha)<THREE.MathUtils.degToRad(0.3))dAlpha=0;
+  // 2. Invert beta: look up (beta decr) → positive pitch
+  var pitch=-dBeta;
+  var yaw=dAlpha;
 
-  // 3. Low-pass filter (0.25 weight → kills 75% of high-freq noise)
-  _fBeta=0.25*dBeta+0.75*_fBeta;
-  _fAlpha=0.25*dAlpha+0.75*_fAlpha;
+  // 3. Dead zone: ignore sub-0.5° jitter (sensor noise)
+  if(Math.abs(pitch)<THREE.MathUtils.degToRad(0.5))pitch=0;
+  if(Math.abs(yaw)<THREE.MathUtils.degToRad(0.5))yaw=0;
 
-  // 4. Velocity cap: 5°/frame ≈ 300°/sec (human head turn speed)
+  // 4. Low-pass filter (0.25 weight → kills 75% of high-freq noise)
+  pitch=0.25*pitch+0.75*_fBeta;
+  yaw=0.25*yaw+0.75*_fAlpha;
+  _fBeta=pitch;_fAlpha=yaw;
+
+  // 5. Invert both: pitch = -deltaBeta, yaw = -deltaAlpha
+  //    So phone tilts toward ceiling (look up) → camera looks up
+  //       Phone rotates left → camera looks left
+  pitch=-pitch;
+  yaw=-yaw;
+
+  // 6. Velocity cap: 5°/frame ≈ 300°/sec (human head turn speed)
   var MAX=THREE.MathUtils.degToRad(5);
-  _fBeta=Math.max(-MAX,Math.min(MAX,_fBeta));
-  _fAlpha=Math.max(-MAX,Math.min(MAX,_fAlpha));
+  pitch=Math.max(-MAX,Math.min(MAX,pitch));
+  yaw=Math.max(-MAX,Math.min(MAX,yaw));
 
-  // 5. Build delta quaternion
-  _eulerObj.set(_fBeta,_fAlpha,0,'YXZ');
+  // 6. Build delta quaternion (pitch first, then yaw in world frame)
+  _eulerObj.set(pitch,yaw,0,'YXZ');
   _deltaQuat.setFromEuler(_eulerObj);
 
-  // 6. Accumulate toward target rotation
+  // 7. Accumulate toward target rotation
   _targetQuat.multiply(_deltaQuat);
   _targetQuat.normalize();
 
-  // 7. Slerp from current position → target (15%/frame = inertia feel)
+  // 8. Slerp from current position → target (15%/frame = inertia feel)
   _smoothQuat.slerp(_targetQuat,0.15);
   _smoothQuat.normalize();
 
