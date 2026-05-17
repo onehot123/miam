@@ -497,39 +497,40 @@ updateScore();
 // === Tap-to-Catch on Canvas ===
 var tapRay=new THREE.Raycaster();
 
-// === VR-safe Gyro with damping & smoothing ===
+// === VR Head Tracking (Quaternions) ===
 var gyroInit=false;
-var gyroSmoothYaw=0,gyroSmoothPitch=0;
-var gyroCurrentYaw=0,gyroCurrentPitch=0;
-var useGyro=false;
-var euler=new THREE.Euler(),quat=new THREE.Quaternion(),initQ=new THREE.Quaternion();
+var _eulerObj=new THREE.Euler();
+var _deviceQuat=new THREE.Quaternion();
+var _initQuat=new THREE.Quaternion();
+var _smoothQuat=new THREE.Quaternion();
+var _targetQuat=new THREE.Quaternion();
+var _q1=new THREE.Quaternion(-Math.sqrt(0.5),0,0,Math.sqrt(0.5)); // -90° around X: align device back with camera forward
 
 function onOri(e){
   if(e.alpha===null)return;
-  // Clamp beta (tilt forward/back) to prevent flipping
-  var beta=e.beta||0;
-  var clampedBeta=Math.max(-45,Math.min(45,beta));
-  var ga=e.gamma||0;
-  var al=e.alpha||0;
-  euler.set(THREE.MathUtils.degToRad(clampedBeta),THREE.MathUtils.degToRad(al),THREE.MathUtils.degToRad(ga),'YXZ');
-  quat.setFromEuler(euler);
+  var alpha=THREE.MathUtils.degToRad(e.alpha||0);
+  var beta =THREE.MathUtils.degToRad(e.beta||0);
+  var gamma=THREE.MathUtils.degToRad(e.gamma||0);
+  // Clamp beta to ±60° to prevent flipping
+  beta=Math.max(-Math.PI/3,Math.min(Math.PI/3,beta));
+  // Key fix: euler.set(beta, alpha, -gamma, 'YXZ')
+  // beta→pitch (X), alpha→yaw (Y), -gamma→roll (Z inverted)
+  _eulerObj.set(beta,alpha,-gamma,'YXZ');
+  _deviceQuat.setFromEuler(_eulerObj);
+  // Multiply by q1: align device coordinate (back faces camera)
+  _deviceQuat.multiply(_q1);
+
   if(!gyroInit){
-    initQ.copy(quat).invert();
-    gyroSmoothYaw=0;
-    gyroSmoothPitch=0;
+    _initQuat.copy(_deviceQuat).invert();
+    _smoothQuat.set(0,0,0,1); // identity
     gyroInit=true;
-    useGyro=true;
+    return;
   }
-  var targetQuat=quat.clone().multiply(initQ);
-  var targetEuler=new THREE.Euler().setFromQuaternion(targetQuat,'YXZ');
-  gyroCurrentYaw=targetEuler.y;
-  gyroCurrentPitch=targetEuler.x;
-  // Smooth lerp (VR-safe: max 30% per frame change)
-  var lerpFactor=0.12;
-  gyroSmoothYaw=gyroSmoothYaw+(gyroCurrentYaw-gyroSmoothYaw)*lerpFactor;
-  gyroSmoothPitch=gyroSmoothPitch+(gyroCurrentPitch-gyroSmoothPitch)*lerpFactor;
-  // Apply smooth rotation
-  pivot.rotation.set(gyroSmoothPitch,gyroSmoothYaw,0,'YXZ');
+  // Relative rotation from initial pose
+  _targetQuat.copy(_initQuat).multiply(_deviceQuat);
+  // Smooth slerp: 12% per frame for VR comfort
+  _smoothQuat.slerp(_targetQuat,0.12);
+  pivot.quaternion.copy(_smoothQuat);
 }
 
 // Touch fallback for camera control (pan)
