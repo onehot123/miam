@@ -627,14 +627,14 @@ function formatTime(ms){
  *  - 60s → ~50th (median, feels fair)
  *  - 90s → ~20th (struggled but still shareable)
  *  - 180s → ~5th (near bottom)
- *  Formula: percentile = 100 * exp( - (t/45)^1.8 )
+  *  Formula: percentile = 100 * exp( - (t/45)^1.8 )
  *  This gives a nice sigmoidal decay on log scale.
  */
 function calcPercentile(ms){
   var t=ms/1000; // seconds
   if(t<=3)return 100;
   var p=100*Math.exp(-Math.pow(t/45,1.8));
-  return Math.max(1,Math.min(99,Math.round(p)));
+  return Math.max(0.1,Math.min(99.9,p));
 }
 
 function showToast(msg){toastEl.textContent=msg;toastEl.classList.add('show');setTimeout(function(){toastEl.classList.remove('show')},1500)}
@@ -652,22 +652,42 @@ function endGame(allCaught){
   var shareMsg,shareTitle;
 
   if(allCaughtBool){
-    // Completed: rank-based percentile message
+    // ====== T0: 人类高质量颈椎 (95% - 99.9%) ======
     if(percentile>=95){
-      shareTitle='🏆 颈椎灵活度天花板！';
-      shareMsg='我仅用【'+formatTime(elapsed)+'】抓齐毛球，击败了'+percentile+'%的人！你行你上！🔥';
-    }else if(percentile>=80){
-      shareTitle='🐾 颈椎灵活度优秀！';
-      shareMsg='我用了【'+formatTime(elapsed)+'】找齐毛球，击败了'+percentile+'%的人。快来挑战！';
-    }else if(percentile>=50){
-      shareTitle='🐾 表现还不错！';
-      shareMsg='我用了【'+formatTime(elapsed)+'】找齐毛球，击败了'+percentile+'%的人。有没有更快的？';
-    }else if(percentile>=20){
-      shareTitle='🐾 颈椎有些僵硬…';
-      shareMsg='我用了【'+formatTime(elapsed)+'】才找齐，只击败了'+percentile+'%的人。快来帮我报仇！';
-    }else{
-      shareTitle='🐾 重度颈椎僵硬患者';
-      shareMsg='我用了【'+formatTime(elapsed)+'】才找齐毛球，只击败了'+percentile+'%的人。猜你也过不了第一关 😅';
+      shareTitle='🏆 T0 人类高质量颈椎';
+      shareMsg='耗时【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家！人类的颈椎已经限制不了你了！🔥';
+    }
+    // ====== T1: 健康活力打工人 (70% - 94.9%) ======
+    else if(percentile>=85){
+      shareTitle='🥇 健康活力打工人';
+      shareMsg='用时【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家！经鉴定：这是一颗保养得当、充满活力的优秀头颅！';
+    }
+    else if(percentile>=70){
+      shareTitle='🥇 健康活力打工人';
+      shareMsg='耗时【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家！你的脖子比公司的网络还要流畅！💨';
+    }
+    // ====== T2: 标准生锈齿轮 (30% - 69.9%) ======
+    else if(percentile>=60){
+      shareTitle='🥈 标准生锈齿轮';
+      shareMsg='击败了【'+percentile.toFixed(1)+'%】的玩家。比上不足比下有余，为了你的脖子，建议每天把本网页当成赛博牵引器用一次！';
+    }
+    else if(percentile>=30){
+      shareTitle='🥈 标准生锈齿轮';
+      shareMsg='用时【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家。标准的打工人颈椎，刚才仰头的时候，是不是听到了一声清脆的"咔哒"声？';
+    }
+    // ====== T3: 重度僵硬患者 (5% - 29.9%) ======
+    else if(percentile>=15){
+      shareTitle='🥉 重度僵硬患者';
+      shareMsg='耗时【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的网友。系统检测到高浓度"班味"，你的脖子转得比树懒还慢！🦥';
+    }
+    else if(percentile>=5){
+      shareTitle='🥉 重度僵硬患者';
+      shareMsg='仅击败了【'+percentile.toFixed(1)+'%】的玩家。答应我，放下工作，站起来活动一下好吗？';
+    }
+    // ====== T4: 出土文物级别 (0.1% - 4.9%) ======
+    else{
+      shareTitle='🪨 出土文物级别';
+      shareMsg='击败了【'+percentile.toFixed(1)+'%】的玩家。不说了，下班去做个按摩吧，真的。';
     }
   }else{
     // Not completed: time-based message
@@ -683,7 +703,7 @@ function endGame(allCaught){
     '<div class="share-stats">'+
       '<div class="share-stat"><div class="val">'+caught+'/'+TOTAL+'</div><div class="lbl">毛球</div></div>'+
       '<div class="share-stat"><div class="val">'+formatTime(elapsed)+'</div><div class="lbl">用时</div></div>'+
-      '<div class="share-stat"><div class="val">'+percentile+'%</div><div class="lbl">排名</div></div>'+
+      '<div class="share-stat"><div class="val">'+percentile.toFixed(1)+'%</div><div class="lbl">排名</div></div>'+
     '</div>'+
     '<div class="share-actions">'+
       '<button class="btn-copy" onclick="copyLink()">📋 复制链接</button>'+
