@@ -725,39 +725,57 @@ var _deviceQuat=new THREE.Quaternion();
 var _initQuat=new THREE.Quaternion();
 var _smoothQuat=new THREE.Quaternion();
 var _targetQuat=new THREE.Quaternion();
+var _deltaQuat=new THREE.Quaternion();
+var _touchQuat=new THREE.Quaternion();
+var _prevBeta=0;
+var _prevAlpha=0;
 
 function onOri(e){
   if(e.alpha===null)return;
-  // Device orientation (iOS):
-  //   beta   = tilt front-to-back (-180~180), screen facing user:
-  //     phone top closer (look up) → beta positive
-  //     phone top away (look down) → beta negative
-  //   alpha  = compass heading (Z rotation)
-  //   gamma  = left-right tilt (Y rotation)
-  //
-  // VR mapping: tilt toward you to look up (positive pitch)
-  // No euler → avoid gimbal lock. Build quaternion directly.
 
   var beta=THREE.MathUtils.degToRad(e.beta||0);
   var alpha=THREE.MathUtils.degToRad(e.alpha||0);
-  var gamma=THREE.MathUtils.degToRad(e.gamma||0);
-
-  // No clamp at all — let full range pass through
-  // Use YXZ euler only here, but with full range.
-  // The real smoothness comes from quaternion slerp, not euler.
-  _eulerObj.set(beta,alpha,0,'YXZ');
-  _deviceQuat.setFromEuler(_eulerObj);
 
   if(!gyroInit){
-    _initQuat.copy(_deviceQuat).invert();
+    // Store initial raw values, set initQuat as identity
+    _prevBeta=beta;
+    _prevAlpha=alpha;
+    _initQuat.set(0,0,0,1); // identity — our "zero" reference
     _smoothQuat.set(0,0,0,1);
+    pivot.quaternion.copy(_smoothQuat);
     gyroInit=true;
     return;
   }
 
-  _targetQuat.copy(_initQuat).multiply(_deviceQuat);
-  // Faster smoothing for snappier feel
-  _smoothQuat.slerp(_targetQuat,0.2);
+  // Compute angle deltas (with 360° wrap-around correction)
+  var dBeta=beta-_prevBeta;
+  var dAlpha=alpha-_prevAlpha;
+
+  if(dBeta>Math.PI)dBeta-=Math.PI*2;
+  if(dBeta<-Math.PI)dBeta+=Math.PI*2;
+  if(dAlpha>Math.PI)dAlpha-=Math.PI*2;
+  if(dAlpha<-Math.PI)dAlpha+=Math.PI*2;
+
+  // Angular velocity cap: max 45° per frame at 60fps ≈ 2700°/sec
+  // Human heads can turn ~200-300°/sec, we allow a bit more for phone
+  var MAX_DELTA=THREE.MathUtils.degToRad(45);
+  dBeta=Math.max(-MAX_DELTA,Math.min(MAX_DELTA,dBeta));
+  dAlpha=Math.max(-MAX_DELTA,Math.min(MAX_DELTA,dAlpha));
+
+  _prevBeta=beta;
+  _prevAlpha=alpha;
+
+  // Build delta quaternion: pitch first (X), then yaw (Y)
+  // Using 'YXZ' so the yaw is applied in the world frame (not tilted frame)
+  _eulerObj.set(dBeta,dAlpha,0,'YXZ');
+  _deltaQuat.setFromEuler(_eulerObj);
+
+  // Apply delta to current accumulated rotation
+  _smoothQuat.multiply(_deltaQuat);
+
+  // Normalize to prevent drift
+  _smoothQuat.normalize();
+
   pivot.quaternion.copy(_smoothQuat);
 }
 
@@ -772,7 +790,9 @@ REN.domElement.addEventListener('pointermove',function(e){
   yaw-=(e.clientX-lx)*.003;pt-=(e.clientY-ly)*.003;
   pt=Math.max(-1.4,Math.min(1.4,pt));
   lx=e.clientX;ly=e.clientY;
-  pivot.rotation.set(pt,yaw,0,'YXZ');
+  // Touch mode: also use quaternion, consistent with gyro
+  _touchQuat.setFromEuler(new THREE.Euler(pt,yaw,0,'YXZ'));
+  pivot.quaternion.copy(_touchQuat);
 });
 REN.domElement.addEventListener('pointerup',function(e){
   drag=false;
