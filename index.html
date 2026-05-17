@@ -54,7 +54,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 (function(){
 'use strict';
 
-var RW=12,RD=12,RH=10,HW=6,HD=6,EYE=1.6,TOTAL=5;
+var RW=12,RD=12,RH=10,HW=6,HD=6,EYE=1.7,TOTAL=5;
 var COLORS=[0xe74c3c,0xe67e22,0xf1c40f,0x2ecc71,0x1abc9c,0x3498db,0x9b59b6,0xe91e63,0xff5722,0x00bcd4,0xffeb3b,0x4caf50,0xff4081,0x7c4dff,0x00e676];
 
 // === Procedural Texture Generator ===
@@ -159,7 +159,7 @@ var scene=new THREE.Scene();
 scene.background=new THREE.Color(0x1a1a2e);
 scene.fog=new THREE.Fog(0x1a1a2e,0.02,20);
 
-var cam=new THREE.PerspectiveCamera(50,1,.05,60);
+var cam=new THREE.PerspectiveCamera(65,1,.05,60);
 cam.position.y=EYE;
 var pivot=new THREE.Object3D();
 pivot.position.y=EYE;
