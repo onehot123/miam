@@ -35,168 +35,160 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 (function(){
 'use strict';
 
-/* ============ 常量 ============ */
-var RW = 12, RD = 12, RH = 10, HALF_W = 6, HALF_D = 6, EYE_Y = 1.6;
-var TOTAL_BALLS = 5, MAX_STARE = 3;
+var RW=12,RD=12,RH=10,HW=6,HD=6,EYE=1.6,TOTAL=5,MAX_STARE=3;
+var COLORS=[0xe74c3c,0xe67e22,0xf1c40f,0x2ecc71,0x1abc9c,0x3498db,0x9b59b6,0xe91e63,0xff5722,0x00bcd4,0xffeb3b,0x4caf50,0xff4081,0x7c4dff,0x00e676];
 
-/* ============ 场景/相机/渲染 ============ */
-var scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1a2e);
-scene.fog = new THREE.FogExp2(0x1a1a2e, 0.025);
+var scene=new THREE.Scene();
+scene.background=new THREE.Color(0x1a1a2e);
+scene.fog=new THREE.FogExp2(0x1a1a2e,0.022);
 
-var cam = new THREE.PerspectiveCamera(55, 1, 0.05, 60);
-cam.position.y = EYE_Y;
-
-var pivot = new THREE.Object3D();
-pivot.position.y = EYE_Y;
+var cam=new THREE.PerspectiveCamera(55,1,.05,60);
+cam.position.y=EYE;
+var pivot=new THREE.Object3D();
+pivot.position.y=EYE;
 scene.add(pivot);
 pivot.add(cam);
 
-var box = document.getElementById('cvbox');
-var REN = new THREE.WebGLRenderer({antialias:true});
-REN.shadowMap.enabled = true;
-REN.shadowMap.type = THREE.PCFSoftShadowMap;
-REN.outputEncoding = THREE.sRGBEncoding;
-REN.toneMapping = THREE.ACESFilmicToneMapping;
-REN.toneMappingExposure = 1.0;
+var box=document.getElementById('cvbox');
+var REN=new THREE.WebGLRenderer({antialias:true});
+REN.shadowMap.enabled=true;
+REN.shadowMap.type=THREE.PCFSoftShadowMap;
+REN.outputEncoding=THREE.sRGBEncoding;
+REN.toneMapping=THREE.ACESFilmicToneMapping;
+REN.toneMappingExposure=0.9;
 box.appendChild(REN.domElement);
 
 function rsz(){
-  var w = Math.min(innerWidth*.92, 420), h = Math.min(innerHeight*.82, 780);
-  box.style.width=w+'px'; box.style.height=h+'px';
-  cam.aspect=w/h; cam.updateProjectionMatrix(); REN.setSize(w,h);
+  var w=Math.min(innerWidth*.92,420),h=Math.min(innerHeight*.82,780);
+  box.style.width=w+'px';box.style.height=h+'px';
+  cam.aspect=w/h;cam.updateProjectionMatrix();REN.setSize(w,h);
 }
-rsz(); addEventListener('resize',rsz);
+rsz();addEventListener('resize',rsz);
 
-/* ============ 灯光 ============ */
-scene.add(new THREE.HemisphereLight(0xddeeff,0x2a2a4a,0.35));
-scene.add(new THREE.AmbientLight(0xffffff,0.25));
-var sun=new THREE.DirectionalLight(0xfff5e0,0.7);
-sun.position.set(4,8,-3); sun.castShadow=true;
+scene.add(new THREE.HemisphereLight(0xffeedd,0x2a2a4a,0.4));
+scene.add(new THREE.AmbientLight(0xffffff,0.2));
+var sun=new THREE.DirectionalLight(0xfff5e0,0.8);
+sun.position.set(4,8,-3);sun.castShadow=true;
 sun.shadow.mapSize.set(2048,2048);
-sun.shadow.camera.near=0.5; sun.shadow.camera.far=30;
-sun.shadow.camera.left=-12; sun.shadow.camera.right=12;
-sun.shadow.camera.top=12; sun.shadow.camera.bottom=-2;
+sun.shadow.camera.near=.5;sun.shadow.camera.far=30;
+sun.shadow.camera.left=-12;sun.shadow.camera.right=12;
+sun.shadow.camera.top=12;sun.shadow.camera.bottom=-2;
 scene.add(sun);
 
-/* ============ 工具 ============ */
 function sm(c,r){var m=new THREE.MeshStandardMaterial({color:c,roughness:r!==undefined?r:.75,metalness:0});return m}
-function boxMesh(w,h,d,m){var o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.castShadow=true;o.receiveShadow=true;return o}
 
-/* ============ 房间六面 ============ */
-// 地板 - 浅木色
-var fl=new THREE.Mesh(new THREE.PlaneGeometry(RW,RD),sm(0xc8a87c,.85));
-fl.rotation.x=-Math.PI/2; fl.position.y=0; fl.receiveShadow=true; scene.add(fl);
+// Floor
+var fl=new THREE.Mesh(new THREE.PlaneGeometry(RW,RD),sm(0x8B7355,.85));
+fl.rotation.x=-Math.PI/2;fl.position.y=0;fl.receiveShadow=true;scene.add(fl);
 
-// 天花板 - 深蓝灰色
+// Ceiling
 var ce=new THREE.Mesh(new THREE.PlaneGeometry(RW,RD),sm(0x2a2a4a,.9));
-ce.rotation.x=Math.PI/2; ce.position.y=RH; scene.add(ce);
+ce.rotation.x=Math.PI/2;ce.position.y=RH;scene.add(ce);
 
-// 墙壁 - 雾霾蓝
-var wallColor=0x3a3a5c;
-function addWall(pos,rotY){
-  var m=new THREE.Mesh(new THREE.PlaneGeometry(RW,RH),sm(wallColor,.9));
-  m.position.copy(pos); m.rotation.y=rotY; m.receiveShadow=true; scene.add(m);
+// Walls
+function aw(pos,rotY,col){
+  var m=new THREE.Mesh(new THREE.PlaneGeometry(RW,RH),sm(col,.9));
+  m.position.copy(pos);m.rotation.y=rotY;m.receiveShadow=true;scene.add(m);
+  return m;
 }
-addWall(new THREE.Vector3(0,RH/2,-HALF_D),0);
-addWall(new THREE.Vector3(0,RH/2,HALF_D),Math.PI);
-addWall(new THREE.Vector3(-HALF_W,RH/2,0),Math.PI/2);
-addWall(new THREE.Vector3(HALF_W,RH/2,0),-Math.PI/2);
+aw(new THREE.Vector3(0,RH/2,-HD),0,0x3a3a5c);
+aw(new THREE.Vector3(0,RH/2,HD),Math.PI,0x3a3a5c);
+aw(new THREE.Vector3(-HW,RH/2,0),Math.PI/2,0x333355);
+aw(new THREE.Vector3(HW,RH/2,0),-Math.PI/2,0x333355);
 
 // 踢脚线
-var blMat=sm(0x2a2a4a,.8);
-[[-HALF_D,RW,.12,.03,0,-.015],[HALF_D,RW,.12,.03,0,.015],[-HALF_W,0,.03,RD,.12,-.015],[HALF_W,0,.03,RD,.12,.015]].forEach(function(a){
+var blMat=sm(0x1a1a2e,.8);
+[[-HD,RW,.12,.03,0,-.015],[HD,RW,.12,.03,0,.015],[-HW,0,.03,RD,.12,-.015],[HW,0,.03,RD,.12,.015]].forEach(function(a){
   var bm=new THREE.Mesh(new THREE.BoxGeometry(a[1],a[2],a[3]),blMat);
-  bm.position.set(a[5],a[2]/2,a[0]+(a[0]>0?-a[4]:a[4]));
-  if(a[1]===RW) bm.position.set(0,a[2]/2,a[0]+(a[0]<0?.03:-.03));
-  else bm.position.set(a[3]>0?HALF_W-.03:-HALF_W+.03,a[2]/2,a[0]+a[5]);
+  if(a[1]===RW)bm.position.set(0,a[2]/2,a[0]);
+  else bm.position.set(a[3]>0?HW-.03:-HW+.03,a[2]/2,a[0]);
   scene.add(bm);
 });
 
-// ═══ 高架走道/栏杆 (Y=4) ═══
+// HIGH RAILING
 function addRailing(x,z,len,ry){
   var g=new THREE.Group();
-  var rail=new THREE.Mesh(new THREE.BoxGeometry(len,.08,.08),sm(0x5a5a7c,.6));
-  rail.position.y=0; g.add(rail);
-  var rail2=new THREE.Mesh(new THREE.BoxGeometry(len,.06,.06),sm(0x5a5a7c,.6));
-  rail2.position.y=.4; g.add(rail2);
+  var rm=sm(0x5a5a7c,.6);
+  g.add((function(){var m=new THREE.Mesh(new THREE.BoxGeometry(len,.08,.08),rm);m.position.y=0;return m})());
+  g.add((function(){var m=new THREE.Mesh(new THREE.BoxGeometry(len,.06,.06),rm);m.position.y=.4;return m})());
   for(var i=0;i<Math.floor(len/1.2);i++){
-    var post=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.5,6),sm(0x5a5a7c,.6));
-    post.position.set(-len/2+.6+i*1.2,.25,0); g.add(post);
+    var post=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.5,6),rm);
+    post.position.set(-len/2+.6+i*1.2,.25,0);g.add(post);
   }
-  g.position.set(x,3.8,z); g.rotation.y=ry; scene.add(g);
+  g.position.set(x,3.8,z);g.rotation.y=ry;scene.add(g);
 }
 addRailing(-5.5,0,10,Math.PI/2);
 addRailing(5.5,0,10,Math.PI/2);
 addRailing(0,-5.5,10,0);
 addRailing(0,5.5,10,0);
 
-// 高架走道地板
 var rampMat=sm(0x4a4a6a,.8);
 [[-5.5,1.2,9],[5.5,1.2,9],[0,9,1.2],[0,-5.5,1.2],[0,5.5,1.2]].forEach(function(a){
   var rf=new THREE.Mesh(new THREE.PlaneGeometry(a[1],a[2]),rampMat);
-  rf.rotation.x=-Math.PI/2; rf.position.set(a[0],3.8,a[0]===0?a[3]:0); rf.receiveShadow=true; scene.add(rf);
+  rf.rotation.x=-Math.PI/2;rf.position.set(a[0],3.8,a[0]===0?a[3]:0);rf.receiveShadow=true;scene.add(rf);
 });
 
-/* ============ 高处装饰 ============ */
-
-// 高架书架 (贴墙)
+// HIGH SHELVES
 function addHighShelf(x,z,ry,yBase){
   var g=new THREE.Group(),s=sm(0x5a5a7c,.7);
-  var shelves=5;
-  for(var i=0;i<shelves;i++){
+  for(var i=0;i<5;i++){
     var b=new THREE.Mesh(new THREE.BoxGeometry(2,.06,.35),s);
-    b.position.y=i*.6; b.castShadow=true; b.receiveShadow=true; g.add(b);
-    var bc=[0xcc6666,0x6688aa,0x88aa66,0xddaa66,0xaa66aa,0x66aacc,0xe8c0a0,0xa0c8e8];
-    var numB=3+Math.floor(Math.random()*4);
+    b.position.y=i*.6;b.castShadow=true;b.receiveShadow=true;g.add(b);
+    var numB=4+Math.floor(Math.random()*4);
     var bx=-.8;
     for(var j=0;j<numB&&bx<.8;j++){
-      var bw=.06+Math.random()*.08, bh=.3+Math.random()*.2;
-      var bk=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,.3),sm(bc[Math.floor(Math.random()*bc.length)],.8));
-      bk.position.set(bx+bw/2,.03+i*.6+bh/2,0); bk.castShadow=true; g.add(bk);
+      var bw=.05+Math.random()*.07,bh=.25+Math.random()*.2;
+      var bk=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,.3),sm(COLORS[Math.floor(Math.random()*COLORS.length)],.8));
+      bk.position.set(bx+bw/2,.03+i*.6+bh/2,0);bk.castShadow=true;g.add(bk);
       bx+=bw+.02;
     }
   }
-  [-1,.9].forEach(function(a){var p=new THREE.Mesh(new THREE.BoxGeometry(.06,shelves*.6,.35),sm(0x4a4a6a,.7));p.position.set(a,shelves*.6/2,0);p.castShadow=true;g.add(p)});
-  g.position.set(x,yBase,z); g.rotation.y=ry; scene.add(g);
+  [-1,.9].forEach(function(a){var p=new THREE.Mesh(new THREE.BoxGeometry(.06,5*.6,.35),sm(0x4a4a6a,.7));p.position.set(a,5*.6/2,0);p.castShadow=true;g.add(p)});
+  g.position.set(x,yBase,z);g.rotation.y=ry;scene.add(g);
 }
-addHighShelf(-5.8, -3, Math.PI/2, 4.5);
-addHighShelf(5.8, 2, -Math.PI/2, 5);
-addHighShelf(-3, -5.8, 0, 4.8);
-addHighShelf(3, 5.8, Math.PI, 5.2);
+addHighShelf(-5.8,-3,Math.PI/2,4.5);
+addHighShelf(5.8,2,-Math.PI/2,5);
+addHighShelf(-3,-5.8,0,4.8);
+addHighShelf(3,5.8,Math.PI,5.2);
+addHighShelf(0,-5.8,0,6);
+addHighShelf(0,5.8,Math.PI,6.5);
 
-// 高架柜子
+// HIGH CABINETS
 function addHighCabinet(x,z,ry){
   var g=new THREE.Group(),m=sm(0x4a4a6a,.7);
   var body=new THREE.Mesh(new THREE.BoxGeometry(.8,2.5,.5),m);body.position.y=1.25;body.castShadow=true;g.add(body);
   var top=new THREE.Mesh(new THREE.BoxGeometry(.85,.1,.55),sm(0x5a5a7a,.6));top.position.y=2.55;g.add(top);
-  [-.35,.35].forEach(function(dx){var h=new THREE.Mesh(new THREE.SphereGeometry(.03,6,6),sm(0x888888));h.position.set(dx,1.3,.26);g.add(h)});
-  g.position.set(x,4,z); g.rotation.y=ry; scene.add(g);
+  var handle=new THREE.Mesh(new THREE.BoxGeometry(.1,.1,.03),sm(COLORS[Math.floor(Math.random()*COLORS.length)],.5));
+  handle.position.set(0,1.3,.26);g.add(handle);
+  g.position.set(x,4,z);g.rotation.y=ry;scene.add(g);
 }
 addHighCabinet(5.7,-4,-Math.PI/2);
 addHighCabinet(-5.7,3,Math.PI/2);
+addHighCabinet(4,0,-Math.PI/2);
+addHighCabinet(-4,0,Math.PI/2);
 
-// 高架盆栽
+// PLANTS
 function addHighPlant(x,y,z){
   var g=new THREE.Group();
   var pot=new THREE.Mesh(new THREE.CylinderGeometry(.2,.15,.3,10),sm(0xc87c5c,.8));
-  pot.position.y=.15; pot.castShadow=true; g.add(pot);
-  var trunk=new THREE.Mesh(new THREE.CylinderGeometry(.02,.03,.6,6),sm(0x8B6c42,.8));
-  trunk.position.y=.6; trunk.castShadow=true; g.add(trunk);
-  for(var i=0;i<6;i++){
-    var th=Math.random()*Math.PI*2, ph=Math.random()*Math.PI*.6;
-    var leaf=new THREE.Mesh(new THREE.SphereGeometry(.12+Math.random()*.08,8,6),sm(0x4a8a4a,.8));
+  pot.position.y=.15;pot.castShadow=true;g.add(pot);
+  for(var i=0;i<8;i++){
+    var th=Math.random()*Math.PI*2,ph=Math.random()*Math.PI*.6;
+    var leaf=new THREE.Mesh(new THREE.SphereGeometry(.12+Math.random()*.08,8,6),sm(COLORS[Math.floor(Math.random()*COLORS.length)],.8));
     leaf.position.set(.2*Math.sin(ph)*Math.cos(th),.7+ph*.3,.2*Math.sin(ph)*Math.sin(th));
-    leaf.castShadow=true; g.add(leaf);
+    leaf.castShadow=true;g.add(leaf);
   }
-  g.position.set(x,y,z); scene.add(g);
+  g.position.set(x,y,z);scene.add(g);
 }
 addHighPlant(-4.5,4.2,-4.5);
 addHighPlant(4.5,4.2,4.5);
 addHighPlant(-4.5,5,-3);
 addHighPlant(4.5,5,3);
+addHighPlant(0,4.8,0);
+addHighPlant(-3,4.8,3);
+addHighPlant(3,4.8,-3);
 
-// 高架躺椅
+// CHAIRS
 function addHighChair(x,z,ry){
   var g=new THREE.Group(),m=sm(0xd4b896,.8);
   var seat=new THREE.Mesh(new THREE.BoxGeometry(.7,.08,.6),m);seat.position.y=.3;seat.castShadow=true;g.add(seat);
@@ -205,28 +197,34 @@ function addHighChair(x,z,ry){
     var leg=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.3,6),sm(0x8B7355,.7));
     leg.position.set(a[0],.15,a[1]);leg.castShadow=true;g.add(leg);
   });
-  g.position.set(x,4,z); g.rotation.y=ry; scene.add(g);
+  g.position.set(x,4,z);g.rotation.y=ry;scene.add(g);
 }
 addHighChair(-3,4.8,0.5);
 addHighChair(3,-4.8,-0.5);
 
-// 高架画框
+// PAINTINGS
 function addHighPainting(x,y,z,ry,c){
   var g=new THREE.Group();
   g.add(new THREE.Mesh(new THREE.BoxGeometry(.9,.6,.05),sm(0x5a5a7c,.7)));
   var cv=new THREE.Mesh(new THREE.PlaneGeometry(.8,.5),sm(c,.8));
-  cv.position.z=.03; g.add(cv);
-  g.position.set(x,y,z); g.rotation.y=ry; scene.add(g);
+  cv.position.z=.03;g.add(cv);
+  var frameTop=new THREE.Mesh(new THREE.BoxGeometry(.95,.04,.04),sm(0x8B7355));
+  frameTop.position.set(0,.32,.03);g.add(frameTop);
+  var frameBot=new THREE.Mesh(new THREE.BoxGeometry(.95,.04,.04),sm(0x8B7355));
+  frameBot.position.set(0,-.32,.03);g.add(frameBot);
+  g.position.set(x,y,z);g.rotation.y=ry;scene.add(g);
 }
 addHighPainting(-5.8,7.5,-2,Math.PI/2,0xe8a0a0);
 addHighPainting(5.8,8,3,-Math.PI/2,0xa0c8e8);
 addHighPainting(0,7.5,-5.8,0,0xa0e8b8);
 addHighPainting(0,8,5.8,Math.PI,0xe8d8a0);
+addHighPainting(-5.8,5,0,Math.PI/2,0xff6b9d);
+addHighPainting(5.8,6,0,-Math.PI/2,0x4ecdc4);
 
-// 高架窗户 (高处小窗)
+// WINDOWS
 function addHighWindow(x,y,z,ry){
   var g=new THREE.Group(),f=sm(0x5a5a7c,.6);
-  var bar=function(geo,pos){var m=new THREE.Mesh(geo,f);m.position.set(pos[0],pos[1],pos[2]);g.add(m)};
+  function bar(geo,pos){var m=new THREE.Mesh(geo,f);m.position.set(pos[0],pos[1],pos[2]);g.add(m)}
   bar(new THREE.BoxGeometry(1.2,.08,.06),[0,.35,0]);
   bar(new THREE.BoxGeometry(1.2,.08,.06),[0,-.35,0]);
   bar(new THREE.BoxGeometry(.08,.8,.06),[-.55,0,0]);
@@ -235,46 +233,74 @@ function addHighWindow(x,y,z,ry){
   bar(new THREE.BoxGeometry(.08,.8,.06),[0,0,0]);
   var gl=new THREE.Mesh(new THREE.PlaneGeometry(1.1,.7),new THREE.MeshStandardMaterial({color:0x88aacc,roughness:.1,metalness:.1,transparent:true,opacity:.35}));
   g.add(gl);
-  g.position.set(x,y,z); g.rotation.y=ry; scene.add(g);
+  g.position.set(x,y,z);g.rotation.y=ry;scene.add(g);
 }
 addHighWindow(0,6,-5.8,0);
 addHighWindow(0,6,5.8,Math.PI);
 addHighWindow(-5.8,6,0,Math.PI/2);
 addHighWindow(5.8,6,0,-Math.PI/2);
 
-// 吊灯群
+// CHANDELIERS
 function addChandelier(x,y,z){
   var g=new THREE.Group();
   var cord=new THREE.Mesh(new THREE.CylinderGeometry(.015,.015,1,4),sm(0x333333,.8));cord.position.y=.5;g.add(cord);
-  for(var i=0;i<4;i++){
-    var th=i*Math.PI/2;
-    var arm=new THREE.Mesh(new THREE.CylinderGeometry(.01,.01,.4,4),sm(0x444444,.8));
-    arm.position.set(.2*Math.cos(th),.1,.2*Math.sin(th));
-    arm.rotation.z=Math.cos(th)*.5; arm.rotation.x=Math.sin(th)*.5;
-    g.add(arm);
-    var lamp=new THREE.Mesh(new THREE.SphereGeometry(.08,8,8),new THREE.MeshStandardMaterial({color:0xfff5e0,roughness:.5,metalness:0,transparent:true,opacity:.8}));
-    lamp.position.set(.35*Math.cos(th),0,.35*Math.sin(th));
-    g.add(lamp);
+  var frame=new THREE.Mesh(new THREE.TorusGeometry(.25,.02,6,24),sm(0x444444,.6));
+  frame.rotation.x=Math.PI/2;frame.position.y=.1;g.add(frame);
+  for(var i=0;i<6;i++){
+    var th=i*Math.PI/3;
+    var arm=new THREE.Mesh(new THREE.CylinderGeometry(.01,.01,.25,4),sm(0x444444,.8));
+    arm.position.set(.15*Math.cos(th),.05,.15*Math.sin(th));
+    arm.rotation.z=Math.cos(th)*.7;arm.rotation.x=Math.sin(th)*.7;g.add(arm);
+    var lamp=new THREE.Mesh(new THREE.SphereGeometry(.06,8,8),new THREE.MeshStandardMaterial({color:0xfff5e0,roughness:.5,metalness:0,transparent:true,opacity:.8}));
+    lamp.position.set(.25*Math.cos(th),-.05,.25*Math.sin(th));g.add(lamp);
+    var bulb=new THREE.PointLight(COLORS[i%COLORS.length],.15,5);
+    bulb.position.set(.25*Math.cos(th),-.05,.25*Math.sin(th));g.add(bulb);
   }
   var bulb=new THREE.PointLight(0xfff5e0,.4,10);bulb.position.y=0;g.add(bulb);
-  g.position.set(x,y,z); scene.add(g);
+  g.position.set(x,y,z);scene.add(g);
 }
 addChandelier(0,RH-.5,0);
 addChandelier(-3,RH-.5,-3);
 addChandelier(3,RH-.5,3);
+addChandelier(-3,RH-.5,3);
+addChandelier(3,RH-.5,-3);
 
-// 高架楼梯（装饰性）
+// STAIRS
 function addStair(x,z,ry){
   var g=new THREE.Group(),m=sm(0x5a5a7c,.7);
   for(var i=0;i<10;i++){
     var step=new THREE.Mesh(new THREE.BoxGeometry(.6,.12,.3),m);
-    step.position.set(0,i*.35,-i*.3); step.castShadow=true; step.receiveShadow=true; g.add(step);
+    step.position.set(0,i*.35,-i*.3);step.castShadow=true;step.receiveShadow=true;g.add(step);
   }
-  g.position.set(x,0,z); g.rotation.y=ry; scene.add(g);
+  g.position.set(x,0,z);g.rotation.y=ry;scene.add(g);
 }
 addStair(-4,2,0.8);
 
-/* ============ 小球系统 ============ */
+// EXTRA CLUTTER
+for(var i=0;i<20;i++){
+  var th=Math.random()*Math.PI*2,ph=Math.random()*Math.PI;
+  var r=3+Math.random()*3;
+  var deco=new THREE.Mesh(new THREE.SphereGeometry(.06+Math.random()*.08,8,6),sm(COLORS[Math.floor(Math.random()*COLORS.length)],.5));
+  deco.position.set(r*Math.sin(ph)*Math.cos(th),RH*.5+Math.random()*RH*.5,r*Math.sin(ph)*Math.sin(th));
+  deco.castShadow=true;scene.add(deco);
+}
+for(var i=0;i<12;i++){
+  var bar=new THREE.Mesh(new THREE.BoxGeometry(.08,.8+Math.random()*2,.04),sm(COLORS[Math.floor(Math.random()*COLORS.length)],.6));
+  var side=Math.floor(Math.random()*4);
+  if(side===0)bar.position.set(-4+Math.random()*8,RH*.3+Math.random()*RH*.4,-HD+.04);
+  else if(side===1)bar.position.set(-4+Math.random()*8,RH*.3+Math.random()*RH*.4,HD-.04);
+  else if(side===2)bar.position.set(-HW+.04,RH*.3+Math.random()*RH*.4,-4+Math.random()*8);
+  else bar.position.set(HW-.04,RH*.3+Math.random()*RH*.4,-4+Math.random()*8);
+  bar.castShadow=true;scene.add(bar);
+}
+for(var i=0;i<15;i++){
+  var col=COLORS[Math.floor(Math.random()*COLORS.length)];
+  var deco=new THREE.Mesh(new THREE.SphereGeometry(.08+Math.random()*.12,8,6),sm(col,.6));
+  deco.position.set(-4+Math.random()*8,.05+Math.random()*.08,-4+Math.random()*8);
+  deco.castShadow=true;scene.add(deco);
+}
+
+// BALLS
 var balls=[];
 var caught=0;
 var scoreEl=document.getElementById('score');
@@ -282,19 +308,25 @@ var toastEl=document.getElementById('toast');
 var flashEl=document.getElementById('flash');
 
 var BALL_POS=[
-  {x:4.5,y:7,z:-4.5},{x:-4.5,y:8.5,z:4},{x:0,y:9,z:-5.5},{x:-5.5,y:6.5,z:-2},{x:5.5,y:7.5,z:2}
+  {x:4.5,y:7,z:-4.5},{x:-4.5,y:8.5,z:4},{x:0,y:9,z:-5.5},
+  {x:-5.5,y:6.5,z:-2},{x:5.5,y:7.5,z:2},{x:0,y:8.5,z:0},
+  {x:-3,y:9.5,z:3},{x:3,y:9.5,z:-3}
 ];
+for(var i=BALL_POS.length-1;i>0;i--){
+  var j=Math.floor(Math.random()*(i+1));
+  var tmp=BALL_POS[i];BALL_POS[i]=BALL_POS[j];BALL_POS[j]=tmp;
+}
 
 function makeBall(){
-  var r=.2, g=new THREE.Group();
+  var r=.2,g=new THREE.Group();
   var body=new THREE.Mesh(new THREE.SphereGeometry(r,24,24),new THREE.MeshStandardMaterial({color:0xffffff,roughness:.9,metalness:0,transparent:true,opacity:1}));
-  body.castShadow=true; g.add(body);
+  body.castShadow=true;g.add(body);
   for(var i=0;i<16;i++){
     var th=Math.random()*Math.PI*2,ph=Math.random()*Math.PI;
     var d=r*(1+Math.random()*.45);
     var sp=new THREE.Mesh(new THREE.SphereGeometry(r*.12,6,6),new THREE.MeshStandardMaterial({color:0xfffef5,roughness:.95,transparent:true,opacity:1}));
     sp.position.set(d*Math.sin(ph)*Math.cos(th),d*Math.cos(ph),d*Math.sin(ph)*Math.sin(th));
-    sp.castShadow=true; g.add(sp);
+    sp.castShadow=true;g.add(sp);
   }
   var eg=new THREE.SphereGeometry(.02,8,8),em=new THREE.MeshBasicMaterial({color:0x222222});
   var le=new THREE.Mesh(eg,em);le.position.set(-.04,.035,-r*.85);g.add(le);
@@ -305,188 +337,135 @@ function makeBall(){
   return g;
 }
 
-function updateScore(){
-  scoreEl.innerHTML='🐾 '+caught+'/'+TOTAL_BALLS;
-}
-
-function showToast(msg){
-  toastEl.textContent=msg;
-  toastEl.classList.add('show');
-  setTimeout(function(){toastEl.classList.remove('show')},1500);
-}
+function updateScore(){scoreEl.innerHTML='🐾 '+caught+'/'+TOTAL}
+function showToast(msg){toastEl.textContent=msg;toastEl.classList.add('show');setTimeout(function(){toastEl.classList.remove('show')},1500)}
 
 var fleeAnims=[];
 
-function fleeTo(ballIdx, newPos){
+function fleeTo(ballIdx,newPos){
   var b=balls[ballIdx];
-  var startPos=b.mesh.position.clone();
-  var startTime=performance.now();
-  var duration=500;
-  fleeAnims.push({idx:ballIdx,startPos:startPos,endPos:new THREE.Vector3(newPos.x,newPos.y,newPos.z),startTime:startTime,duration:duration});
+  fleeAnims.push({idx:ballIdx,startPos:b.mesh.position.clone(),endPos:new THREE.Vector3(newPos.x,newPos.y,newPos.z),start:performance.now(),dur:800});
 }
 
-function respawnAt(ballIdx){
-  var available=[];
+function findFleePos(idx){
+  var best=null,bestDist=0;
   for(var i=0;i<BALL_POS.length;i++){
     var tooClose=false;
     for(var j=0;j<balls.length;j++){
-      if(j===ballIdx && balls[j].alive){
-        var dx=balls[j].mesh.position.x-BALL_POS[i].x;
-        var dy=balls[j].mesh.position.y-BALL_POS[i].y;
-        var dz=balls[j].mesh.position.z-BALL_POS[i].z;
-        if(Math.sqrt(dx*dx+dy*dy+dz*dz)<2) tooClose=true;
-      }
+      if(j===idx||!balls[j].alive)continue;
+      var d=Math.abs(balls[j].mesh.position.x-BALL_POS[i].x)+Math.abs(balls[j].mesh.position.y-BALL_POS[i].y)+Math.abs(balls[j].mesh.position.z-BALL_POS[i].z);
+      if(d<2.5)tooClose=true;
     }
-    if(!tooClose) available.push(i);
+    if(!tooClose){
+      var pos=BALL_POS[i];
+      var dist=Math.abs(pos.x)+Math.abs(pos.z)+pos.y;
+      if(dist>bestDist){bestDist=dist;best=pos}
+    }
   }
-  if(available.length===0) available=BALL_POS.map(function(_,i){return i});
-  var pick=available[Math.floor(Math.random()*available.length)];
-  return BALL_POS[pick];
+  if(!best){
+    var cx=balls[idx]?balls[idx].mesh.position.x:0;
+    var cz=balls[idx]?balls[idx].mesh.position.z:0;
+    return {x:-cx*.7,y:7+Math.random()*3,z:-cz*.7};
+  }
+  return best;
 }
 
-/* 初始化球 */
-for(var bi=0;bi<TOTAL_BALLS;bi++){
-  var mesh=makeBall();
-  var pos=BALL_POS[bi];
+var bCount=Math.min(TOTAL,BALL_POS.length);
+for(var bi=0;bi<bCount;bi++){
+  var mesh=makeBall(),pos=BALL_POS[bi];
   mesh.position.set(pos.x,pos.y,pos.z);
   scene.add(mesh);
-  balls.push({
-    mesh:mesh, alive:true,
-    baseY:pos.y, phase:Math.random()*Math.PI*2,
-    speed:1+Math.random()*.5, rotS:.2+Math.random()*.3,
-    stareCount:0, lastStare:0,
-    originX:pos.x, originZ:pos.z
-  });
+  balls.push({mesh:mesh,alive:true,baseY:pos.y,phase:Math.random()*Math.PI*2,
+    speed:.8+Math.random()*.6,rotS:.2+Math.random()*.3,stareCount:0});
 }
 updateScore();
 
-/* ============ 中心射线注视检测 ============ */
+// Raycast
 var centerRay=new THREE.Raycaster();
-centerRay.far=20;
 var stareCooldown=0;
 
-function checkCenterRaycast(){
-  if(stareCooldown>0) return;
-  centerRay.set(cam.getWorldDirection(new THREE.Vector3()).normalize().clone(), new THREE.Vector3(0,0,0));
-  centerRay.ray.origin.copy(cam.position);
-  centerRay.ray.direction.copy(cam.getWorldDirection(new THREE.Vector3()));
-
+function checkCenter(){
+  if(stareCooldown>0)return;
+  var dir=new THREE.Vector3();cam.getWorldDirection(dir);
+  centerRay.set(cam.position,dir.normalize());
   for(var i=0;i<balls.length;i++){
-    var b=balls[i];
-    if(!b.alive) continue;
+    var b=balls[i];if(!b.alive)continue;
     var hits=centerRay.intersectObject(b.mesh,true);
-    if(hits.length>0 && hits[0].distance<15){
+    if(hits.length>0&&hits[0].distance<15){
       b.stareCount++;
-      b.lastStare=performance.now();
-
       if(b.stareCount>=MAX_STARE){
-        // 捕获！
-        b.alive=false;
-        scene.remove(b.mesh);
-        caught++;
-        updateScore();
-        flashEl.style.opacity='1';
-        setTimeout(function(){flashEl.style.opacity='0'},300);
-        if(caught>=TOTAL_BALLS){
-          showToast('🎉 全部抓到！太厉害了！');
-        } else {
-          showToast('🐾 抓到 1 只！还剩 '+ (TOTAL_BALLS-caught) +' 只');
-        }
-      } else {
-        // 逃跑！
-        var newPos=respawnAt(i);
-        fleeTo(i, newPos);
-        b.stareCount=b.stareCount; // 保持计数
-        showToast('💨 第 '+b.stareCount+' 次看到！它还'+(MAX_STARE-b.stareCount)+'次才会被抓到');
+        b.alive=false;scene.remove(b.mesh);
+        caught++;updateScore();
+        flashEl.style.opacity='1';setTimeout(function(){flashEl.style.opacity='0'},300);
+        if(caught>=bCount)showToast('🎉 全部抓到！太厉害了！');
+        else showToast('🐾 抓到1只！还剩'+(bCount-caught)+'只');
+      }else{
+        var fp=findFleePos(i);
+        fleeTo(i,fp);
+        showToast('💨 第'+b.stareCount+'次！再盯'+(MAX_STARE-b.stareCount)+'次就抓到！');
       }
-      stareCooldown=800;
+      stareCooldown=1000;
       return;
     }
   }
 }
 
-/* ============ 陀螺仪 ============ */
+// Gyro
 var gyroInit=false;
 var euler=new THREE.Euler(),quat=new THREE.Quaternion(),initQ=new THREE.Quaternion();
-
 function onOri(e){
-  if(e.alpha===null) return;
-  var be=THREE.MathUtils.degToRad(e.beta||0);
-  var ga=THREE.MathUtils.degToRad(e.gamma||0);
-  var al=THREE.MathUtils.degToRad(e.alpha||0);
-  euler.set(be,al,ga,'YXZ');
-  quat.setFromEuler(euler);
+  if(e.alpha===null)return;
+  var be=THREE.MathUtils.degToRad(e.beta||0),ga=THREE.MathUtils.degToRad(e.gamma||0),al=THREE.MathUtils.degToRad(e.alpha||0);
+  euler.set(be,al,ga,'YXZ');quat.setFromEuler(euler);
   if(!gyroInit){initQ.copy(quat).invert();gyroInit=true}
   pivot.quaternion.copy(initQ).multiply(quat);
 }
 
-/* ============ 触屏备用 ============ */
+// Touch fallback
 var drag=false,lx=0,ly=0,yaw=0,pt=0;
 REN.domElement.addEventListener('pointerdown',function(e){drag=true;lx=e.clientX;ly=e.clientY});
 REN.domElement.addEventListener('pointermove',function(e){
   if(!drag)return;
-  yaw-=(e.clientX-lx)*.004; pt-=(e.clientY-ly)*.004;
+  yaw-=(e.clientX-lx)*.004;pt-=(e.clientY-ly)*.004;
   pt=Math.max(-1.4,Math.min(1.4,pt));
-  lx=e.clientX; ly=e.clientY;
+  lx=e.clientX;ly=e.clientY;
   pivot.rotation.set(pt,yaw,0,'YXZ');
 });
 REN.domElement.addEventListener('pointerup',function(){drag=false});
 
-/* ============ 开始按钮 ============ */
+// Start
 document.getElementById('go').addEventListener('click',function(){
   if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
-    DeviceOrientationEvent.requestPermission().then(function(p){
-      if(p==='granted') addEventListener('deviceorientation',onOri,true);
-    });
-  } else {
-    addEventListener('deviceorientation',onOri,true);
-  }
+    DeviceOrientationEvent.requestPermission().then(function(p){if(p==='granted')addEventListener('deviceorientation',onOri,true)});
+  }else{addEventListener('deviceorientation',onOri,true)}
   document.getElementById('splash').classList.add('h');
   setTimeout(function(){document.getElementById('splash').style.display='none'},800);
 });
 
-/* ============ 动画循环 ============ */
+// Animate
 var time=0;
-
 function animate(){
-  requestAnimationFrame(animate);
-  time+=.016;
+  requestAnimationFrame(animate);time+=.016;
 
-  // 注视检测
-  if(stareCooldown>0) stareCooldown-=16;
-  else checkCenterRaycast();
+  if(stareCooldown>0)stareCooldown-=16;else checkCenter();
 
-  // 逃跑动画
   for(var fi=fleeAnims.length-1;fi>=0;fi--){
     var fa=fleeAnims[fi];
-    var now=performance.now();
-    var elapsed=now-fa.startTime;
-    var t=Math.min(1,elapsed/fa.duration);
-    t=t*t*(3-2*t); // smoothstep
+    var now=performance.now(),elapsed=now-fa.start;
+    var t=Math.min(1,elapsed/fa.dur);
+    t=t*t*(3-2*t);
     var b=balls[fa.idx];
-    if(b.mesh){
-      b.mesh.position.lerpVectors(fa.startPos,fa.endPos,t);
-      b.originX=fa.endPos.x;
-      b.originZ=fa.endPos.z;
-      b.baseY=fa.endPos.y;
-    }
-    if(t>=1){
-      fa.endPos=fa.endPos;
-      fleeAnims.splice(fi,1);
-    }
+    if(b&&b.mesh)b.mesh.position.lerpVectors(fa.startPos,fa.endPos,t);
+    if(t>=1)fleeAnims.splice(fi,1);
   }
 
-  // 球动画
   for(var i=0;i<balls.length;i++){
     var b=balls[i];
-    if(!b.alive||!b.mesh) continue;
-    // 浮动
+    if(!b.alive||!b.mesh)continue;
     b.mesh.position.y=b.baseY+Math.sin(time*b.speed+b.phase)*.1;
-    // 自转
     b.mesh.rotation.y+=b.rotS*.016;
-    // 呼吸缩放
-    var breathe=1+Math.sin(time*2+b.phase)*.05;
-    b.mesh.scale.setScalar(breathe);
+    var br=1+Math.sin(time*2+b.phase)*.05;
+    b.mesh.scale.setScalar(br);
   }
 
   REN.render(scene,cam);
