@@ -728,43 +728,36 @@ var _targetQuat=new THREE.Quaternion();
 
 function onOri(e){
   if(e.alpha===null)return;
-  // Device orientation conventions (Apple iOS):
-  //   alpha  = Z-axis rotation (compass heading), 0-360
-  //   beta   = X-axis rotation (-180 to 180), front-to-back tilt
-  //   gamma  = Y-axis rotation (-90 to 90), left-to-right tilt
+  // Device orientation (iOS):
+  //   beta   = tilt front-to-back (-180~180), screen facing user:
+  //     phone top closer (look up) → beta positive
+  //     phone top away (look down) → beta negative
+  //   alpha  = compass heading (Z rotation)
+  //   gamma  = left-right tilt (Y rotation)
   //
-  // VR/phone-held portrait, screen facing user:
-  //   alpha  → yaw (horizontal look left/right)
-  //   beta   → pitch  (vertical look up/down)  [INVERTED for VR: device UP = view DOWN]
-  //   gamma  → roll   (minimal, keep near 0)
-  //
-  // Key insight for VR-like experience:
-  //   When you tilt phone UP (look up at ceiling), beta goes positive
-  //   The camera should look DOWN in the scene → invert beta
+  // VR mapping: tilt toward you to look up (positive pitch)
+  // No euler → avoid gimbal lock. Build quaternion directly.
 
+  var beta=THREE.MathUtils.degToRad(e.beta||0);
   var alpha=THREE.MathUtils.degToRad(e.alpha||0);
-  var beta =THREE.MathUtils.degToRad(e.beta||0);
   var gamma=THREE.MathUtils.degToRad(e.gamma||0);
 
-  // Clamp to avoid extreme orientations
-  beta=Math.max(-Math.PI/2.5,Math.min(Math.PI/2.5,beta));
-
-  // Euler order 'YXZ': Y=yaw(alpha), X=pitch(beta), Z=roll(-gamma)
-  // beta increases when tilting forward (phone top closer) = look up in scene
-  // beta decreases when tilting back (phone top away) = look down in scene
-  // This matches VR: you tilt phone toward you to look up
-  _eulerObj.set(beta,alpha,-gamma,'YXZ');
+  // No clamp at all — let full range pass through
+  // Use YXZ euler only here, but with full range.
+  // The real smoothness comes from quaternion slerp, not euler.
+  _eulerObj.set(beta,alpha,0,'YXZ');
   _deviceQuat.setFromEuler(_eulerObj);
 
   if(!gyroInit){
     _initQuat.copy(_deviceQuat).invert();
-    _smoothQuat.set(0,0,0,1); // identity
+    _smoothQuat.set(0,0,0,1);
     gyroInit=true;
     return;
   }
 
   _targetQuat.copy(_initQuat).multiply(_deviceQuat);
-  _smoothQuat.slerp(_targetQuat,0.12);
+  // Faster smoothing for snappier feel
+  _smoothQuat.slerp(_targetQuat,0.2);
   pivot.quaternion.copy(_smoothQuat);
 }
 
