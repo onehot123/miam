@@ -603,21 +603,34 @@ var _deviceQuat=new THREE.Quaternion();
 var _initQuat=new THREE.Quaternion();
 var _smoothQuat=new THREE.Quaternion();
 var _targetQuat=new THREE.Quaternion();
-var _q1=new THREE.Quaternion(-Math.sqrt(0.5),0,0,Math.sqrt(0.5)); // -90° around X: align device back with camera forward
 
 function onOri(e){
   if(e.alpha===null)return;
+  // Device orientation conventions (Apple iOS):
+  //   alpha  = Z-axis rotation (compass heading), 0-360
+  //   beta   = X-axis rotation (-180 to 180), front-to-back tilt
+  //   gamma  = Y-axis rotation (-90 to 90), left-to-right tilt
+  //
+  // VR/phone-held portrait, screen facing user:
+  //   alpha  → yaw (horizontal look left/right)
+  //   beta   → pitch  (vertical look up/down)  [INVERTED for VR: device UP = view DOWN]
+  //   gamma  → roll   (minimal, keep near 0)
+  //
+  // Key insight for VR-like experience:
+  //   When you tilt phone UP (look up at ceiling), beta goes positive
+  //   The camera should look DOWN in the scene → invert beta
+
   var alpha=THREE.MathUtils.degToRad(e.alpha||0);
   var beta =THREE.MathUtils.degToRad(e.beta||0);
   var gamma=THREE.MathUtils.degToRad(e.gamma||0);
-  // Clamp beta to ±60° to prevent flipping
-  beta=Math.max(-Math.PI/3,Math.min(Math.PI/3,beta));
-  // Key fix: euler.set(beta, alpha, -gamma, 'YXZ')
-  // beta→pitch (X), alpha→yaw (Y), -gamma→roll (Z inverted)
-  _eulerObj.set(beta,alpha,-gamma,'YXZ');
+
+  // Clamp to avoid extreme orientations
+  beta=Math.max(-Math.PI/2.5,Math.min(Math.PI/2.5,beta));
+
+  // Euler order 'YXZ': Y=yaw(alpha), X=pitch(-beta), Z=roll(-gamma)
+  // Inverting beta: looking up (positive beta) → pitch negative (look down in scene)
+  _eulerObj.set(-beta,alpha,-gamma,'YXZ');
   _deviceQuat.setFromEuler(_eulerObj);
-  // Multiply by q1: align device coordinate (back faces camera)
-  _deviceQuat.multiply(_q1);
 
   if(!gyroInit){
     _initQuat.copy(_deviceQuat).invert();
@@ -625,9 +638,8 @@ function onOri(e){
     gyroInit=true;
     return;
   }
-  // Relative rotation from initial pose
+
   _targetQuat.copy(_initQuat).multiply(_deviceQuat);
-  // Smooth slerp: 12% per frame for VR comfort
   _smoothQuat.slerp(_targetQuat,0.12);
   pivot.quaternion.copy(_smoothQuat);
 }
