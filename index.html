@@ -853,10 +853,17 @@ function onOri(e){
   _prevBeta=beta;
   _prevAlpha=alpha;
 
-  // 2. Invert beta: look up (beta decr) → positive pitch
-  //    Yaw sign: if phone left→camera right, flip sign below on rawYaw
-  var rawPitch=-dBeta;
-  var rawYaw=dAlpha;
+  // 2. Invert: phone toward ceiling (look up) → pitch negative → camera looks UP in Three.js
+  //    Actually in Three.js positive X=UP, negative X=DOWN.
+  //    beta decreases (toward ceiling) → we want camera UP → pitch should be POSITIVE.
+  //    So: rawPitch = +deltaBeta (since deltaBeta < 0 when looking up, negate it → positive)
+  //    Wait: beta DECREASES when tilting toward ceiling. deltaBeta = beta_new - beta_old < 0.
+  //    Three.js: positive X = camera looks UP. We need positive pitch when looking up.
+  //    So: pitch = -deltaBeta works! -(-small) = +small → camera looks up ✓
+  //
+  //    BUT we just confirmed it's wrong in practice. Let me just flip both:
+  var rawPitch=dBeta;
+  var rawYaw=-dAlpha;
 
   // 3. Dead zone: ignore sub-0.5° jitter (sensor noise)
   if(Math.abs(rawPitch)<THREE.MathUtils.degToRad(0.5))rawPitch=0;
