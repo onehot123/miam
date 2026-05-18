@@ -655,39 +655,42 @@ function endGame(allCaught){
     // ====== T0: 人类高质量颈椎 (95% - 99.9%) ======
     if(percentile>=95){
       shareTitle='🏆 T0 人类高质量颈椎';
-      shareMsg='耗时【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家！人类的颈椎已经限制不了你了！🔥';
+      shareMsg='【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家！人类的颈椎已经限制不了你了！🔥';
     }
-    // ====== T1: 健康活力打工人 (70% - 94.9%) ======
+    // ====== T1: 健康活力打工人 (85% - 94.9%) ======
     else if(percentile>=85){
-      shareTitle='🥇 健康活力打工人';
-      shareMsg='用时【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家！经鉴定：这是一颗保养得当、充满活力的优秀头颅！';
+      shareTitle='🥇 T1 健康活力打工人';
+      shareMsg='【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家！经鉴定：这是一颗保养得当、充满活力的优秀头颅！';
     }
+    // ====== T1: 健康活力打工人 (70% - 84.9%) ======
     else if(percentile>=70){
-      shareTitle='🥇 健康活力打工人';
-      shareMsg='耗时【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家！你的脖子比公司的网络还要流畅！💨';
+      shareTitle='🥇 T1 健康活力打工人';
+      shareMsg='【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家！你的脖子比公司的网络还要流畅！💨';
     }
-    // ====== T2: 标准生锈齿轮 (30% - 69.9%) ======
+    // ====== T2: 标准生锈齿轮 (60% - 69.9%) ======
     else if(percentile>=60){
-      shareTitle='🥈 标准生锈齿轮';
-      shareMsg='击败了【'+percentile.toFixed(1)+'%】的玩家。比上不足比下有余，为了你的脖子，建议每天把本网页当成赛博牵引器用一次！';
+      shareTitle='🥈 T2 标准生锈齿轮';
+      shareMsg='【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家！建议每天把本网页当成赛博牵引器用一次！';
     }
+    // ====== T2: 标准生锈齿轮 (30% - 59.9%) ======
     else if(percentile>=30){
-      shareTitle='🥈 标准生锈齿轮';
-      shareMsg='用时【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家。标准的打工人颈椎，刚才仰头的时候，是不是听到了一声清脆的"咔哒"声？';
+      shareTitle='🥈 T2 标准生锈齿轮';
+      shareMsg='【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家。刚才仰头的时候，是不是听到了一声清脆的咔哒声？';
     }
-    // ====== T3: 重度僵硬患者 (5% - 29.9%) ======
+    // ====== T3: 重度僵硬患者 (15% - 29.9%) ======
     else if(percentile>=15){
-      shareTitle='🥉 重度僵硬患者';
-      shareMsg='耗时【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的网友。系统检测到高浓度"班味"，你的脖子转得比树懒还慢！🦥';
+      shareTitle='🥉 T3 重度僵硬患者';
+      shareMsg='【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家。系统检测到高浓度班味，你的脖子转得比树懒还慢！🦥';
     }
+    // ====== T3: 重度僵硬患者 (5% - 14.9%) ======
     else if(percentile>=5){
-      shareTitle='🥉 重度僵硬患者';
-      shareMsg='仅击败了【'+percentile.toFixed(1)+'%】的玩家。答应我，放下工作，站起来活动一下好吗？';
+      shareTitle='🥉 T3 重度僵硬患者';
+      shareMsg='【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家。答应我，放下工作，站起来活动一下好吗？';
     }
     // ====== T4: 出土文物级别 (0.1% - 4.9%) ======
     else{
-      shareTitle='🪨 出土文物级别';
-      shareMsg='击败了【'+percentile.toFixed(1)+'%】的玩家。不说了，下班去做个按摩吧，真的。';
+      shareTitle='🪨 T4 出土文物级别';
+      shareMsg='【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家。不说了，下班去做个按摩吧，真的。';
     }
   }else{
     // Not completed: time-based message
