@@ -693,9 +693,38 @@ function endGame(allCaught){
       shareMsg='【'+formatTime(elapsed)+'】，击败了【'+percentile.toFixed(1)+'%】的玩家。不说了，下班去做个按摩吧，真的。';
     }
   }else{
-    // Not completed: time-based message
-    shareTitle='🐾 游戏终止';
-    shareMsg='找了【'+formatTime(elapsed)+'】，只抓到'+caught+'/'+TOTAL+'个就放弃了。颈椎僵硬治疗中…再来一次？🤖';
+    // Not completed: rank by completion percentage
+    var pct=caught>=bCount?100:(caught/bCount*100);
+    var rankPercentile=pct; // use completion rate as the percentile for ranking
+    if(rankPercentile>=85){
+      shareTitle='🥇 T1 健康活力打工人';
+      shareMsg='【'+formatTime(elapsed)+'】，抓到'+caught+'/'+TOTAL+'个。经鉴定：这是一颗保养得当、充满活力的优秀头颅！';
+    }
+    else if(rankPercentile>=70){
+      shareTitle='🥇 T1 健康活力打工人';
+      shareMsg='【'+formatTime(elapsed)+'】，抓到'+caught+'/'+TOTAL+'个。你的脖子比公司的网络还要流畅！💨';
+    }
+    else if(rankPercentile>=60){
+      shareTitle='🥈 T2 标准生锈齿轮';
+      shareMsg='【'+formatTime(elapsed)+'】，抓到'+caught+'/'+TOTAL+'个。建议每天把本网页当成赛博牵引器用一次！';
+    }
+    else if(rankPercentile>=30){
+      shareTitle='🥈 T2 标准生锈齿轮';
+      shareMsg='【'+formatTime(elapsed)+'】，抓到'+caught+'/'+TOTAL+'个。刚才仰头的时候，是不是听到了一声清脆的咔哒声？';
+    }
+    else if(rankPercentile>=15){
+      shareTitle='🥉 T3 重度僵硬患者';
+      shareMsg='【'+formatTime(elapsed)+'】，抓到'+caught+'/'+TOTAL+'个。系统检测到高浓度班味，你的脖子转得比树懒还慢！🦥';
+    }
+    else if(rankPercentile>=5){
+      shareTitle='🥉 T3 重度僵硬患者';
+      shareMsg='【'+formatTime(elapsed)+'】，抓到'+caught+'/'+TOTAL+'个。答应我，放下工作，站起来活动一下好吗？';
+    }
+    else{
+      shareTitle='🪨 T4 出土文物级别';
+      shareMsg='【'+formatTime(elapsed)+'】，只抓到'+caught+'/'+TOTAL+'个。不说了，下班去做个按摩吧，真的。';
+    }
+    var percentile=rankPercentile;
   }
 
   // Show share card
@@ -706,6 +735,9 @@ function endGame(allCaught){
     '<div class="share-stats">'+
       '<div class="share-stat"><div class="val">'+caught+'/'+TOTAL+'</div><div class="lbl">毛球</div></div>'+
       '<div class="share-stat"><div class="val">'+formatTime(elapsed)+'</div><div class="lbl">用时</div></div>'+
+      '<div class="share-stat"><div class="val">'+percentile.toFixed(1)+'%</div><div class="lbl">排名</div></div>'+
+    '</div>'+
+    '<p class="share-footer">分享你的颈椎健康报告</p>';
       '<div class="share-stat"><div class="val">'+percentile.toFixed(1)+'%</div><div class="lbl">排名</div></div>'+
     '</div>'+
     '<div class="share-actions">'+
