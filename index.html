@@ -786,7 +786,9 @@ for(var bi=0;bi<bCount;bi++){
     moveInterval:3+Math.random()*4, // 3~7s between movements
     moveDir:new THREE.Vector3((Math.random()-.5)*2,0,(Math.random()-.5)*2),
     moveRadius:0.3+Math.random()*0.4,
-    moveCenter:{x:pos.x,z:pos.z} // remember original center
+    moveCenter:{x:pos.x,z:pos.z}, // remember original center
+    dodgeCount:0,                  // how many times this ball has escaped
+    escapePos:new THREE.Vector3(pos.x,pos.y,pos.z) // last known position after escape
   });
   // First ball: create icon from it
   if(bi===0)createBallIcon(mesh);
@@ -925,17 +927,26 @@ REN.domElement.addEventListener('pointerup',function(e){
       var hits=tapRay.intersectObject(b.mesh,true);
       if(hits.length>0){
         if(b.running){
-          // Running ball dodges: move it to a new random position, keep it alive
-          var dx=(Math.random()-.5)*3;
-          var dz=(Math.random()-.5)*3;
-          var newY=b.baseY+Math.random()*2-0.5;
-          b.mesh.position.x=b.moveCenter.x+dx;
-          b.mesh.position.z=b.moveCenter.z+dz;
-          b.moveTimer=0;
-          b.moveInterval=3+Math.random()*4;
-          showToast(DODGE_MSGS[Math.floor(Math.random()*DODGE_MSGS.length)]);
-          flashEl.style.opacity='1';
-          setTimeout(function(){flashEl.style.opacity='0'},300);
+          b.dodgeCount++;
+          if(b.dodgeCount<=2){
+            // Escape: teleport to a far-away random BALL_POS
+            var farIdx=Math.floor(Math.random()*BALL_POS.length);
+            var fp=BALL_POS[farIdx];
+            b.escapePos.set(fp.x,fp.y,fp.z);
+            b.mesh.position.copy(b.escapePos);
+            b.moveCenter={x:fp.x,z:fp.z};
+            b.moveTimer=0;
+            b.moveInterval=2+Math.random()*3;
+            showToast(DODGE_MSGS[Math.floor(Math.random()*DODGE_MSGS.length)]);
+            flashEl.style.opacity='1';
+            setTimeout(function(){flashEl.style.opacity='0'},300);
+          }else{
+            // Ball has escaped 3+ times → give up and let it be caught
+            b.running=false;
+            showToast('😮 这只小球不跑了…抓住它！');
+            flashEl.style.opacity='1';
+            setTimeout(function(){flashEl.style.opacity='0'},300);
+          }
         }else{
           // Stationary ball: caught
           b.alive=false;scene.remove(b.mesh);
